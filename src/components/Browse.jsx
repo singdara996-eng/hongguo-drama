@@ -451,12 +451,16 @@ function Browse({ onNavigate, active = true }) {
       if (epRes && epRes.success) {
         for (const e of epRes.data.episodes) statusMap[e.vid_index] = e;
       }
-      const episodes = data.episodes.map((ep) => ({
-        ...ep,
-        status: statusMap[ep.vid_index] ? statusMap[ep.vid_index].status : 'missing',
-        progress: statusMap[ep.vid_index] ? statusMap[ep.vid_index].progress : 0,
-        fileUrl: statusMap[ep.vid_index] ? statusMap[ep.vid_index].fileUrl : null,
-      }));
+      const episodes = data.episodes.map((ep) => {
+        const isLocked = ep.locked === true || (data.web_accessible_episodes != null && ep.vid_index > data.web_accessible_episodes);
+        return {
+          ...ep,
+          locked: isLocked,
+          status: statusMap[ep.vid_index] ? statusMap[ep.vid_index].status : 'missing',
+          progress: statusMap[ep.vid_index] ? statusMap[ep.vid_index].progress : 0,
+          fileUrl: statusMap[ep.vid_index] ? statusMap[ep.vid_index].fileUrl : null,
+        };
+      });
       setDetail({ ...data, episodes, completedCount: episodes.filter((e) => e.status === 'completed').length });
       // 默认全选未下载的
       setSelectedIdx(new Set(episodes.filter((e) => !e.locked && e.status !== 'completed').map((e) => e.vid_index)));
@@ -762,7 +766,9 @@ function Browse({ onNavigate, active = true }) {
                       <div className="browse-drawer-count">
                         {mediaSourceLabel(detail.series_id, mediaSources)}{t(" · 共 ")}{t(detail.total)}{t(" 集 · 已下载 ")}<b>{t(detail.completedCount)}</b>{t(" 集")}</div>
                       {detail.web_accessible_episodes != null && detail.web_accessible_episodes < detail.total && (
-                        <div className="browse-drawer-sub">{t("网页源提供前 ")}{t(detail.web_accessible_episodes)}{t(" 集，后续集数自动尝试 App 片源。")}</div>
+                        <div className="browse-drawer-sub" style={{ color: '#f59e0b', fontWeight: 600, background: 'rgba(245, 158, 11, 0.1)', padding: '6px 10px', borderRadius: '6px', marginTop: '6px' }}>
+                          {t(`⚠️ គេហទំព័រផ្តល់ជូនឥតគិតថ្លៃត្រឹមភាគ ១ ដល់ ${detail.web_accessible_episodes}។ ភាគបន្ទាប់ពីនេះត្រូវចាក់សោរដោយប្រភពដើម (需在官方 App 观看)។`)}
+                        </div>
                       )}
                       {detail.episodes.some((ep) => ep.locked) && <div className="browse-drawer-sub">{t("标记“锁定”的集数需在来源平台解锁，本应用不提供解锁。")}</div>}
                       {(!mobile || selectingDownloads) && <>
