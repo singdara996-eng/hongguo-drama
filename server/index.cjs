@@ -230,38 +230,44 @@ function createApp({ token, dataRoot, downloadRoot, media = defaultMedia, search
       if (streamUrlRoute && request.method === 'GET') {
         const sid = streamUrlRoute[1];
         const vid = streamUrlRoute[2];
-        const cacheKey = `${sid}:${vid}`;
+        const quality = url.searchParams.get('quality') || '480p';
+        const cacheKey = `${sid}:${vid}:${quality}`;
         const cached = streamCache.get(cacheKey);
         if (cached && cached.expires > Date.now()) {
-          return send(200, { success: true, url: cached.url, direct: true });
+          return send(200, { success: true, url: cached.url, direct: cached.direct });
         }
         try {
           const hongguo = require('../src/native/hongguo.js');
           let playWeb = null;
-          try { playWeb = await hongguo.fetchPlayUrlFromWeb(vid, sid); } catch (_) {}
+          if (['360p', '480p', 'auto'].includes(quality)) {
+            try { playWeb = await hongguo.fetchPlayUrlFromWeb(vid, sid); } catch (_) {}
+          }
           if (playWeb?.url) {
-            streamCache.set(cacheKey, { url: playWeb.url, expires: Date.now() + 1800000 });
+            streamCache.set(cacheKey, { url: playWeb.url, direct: true, expires: Date.now() + 1800000 });
             return send(200, { success: true, url: playWeb.url, direct: true });
           }
-          return send(200, { success: true, url: `/api/stream/${encodeURIComponent(sid)}/${encodeURIComponent(vid)}`, direct: false });
+          const fallbackStreamUrl = `/api/stream/${encodeURIComponent(sid)}/${encodeURIComponent(vid)}?quality=${encodeURIComponent(quality)}`;
+          streamCache.set(cacheKey, { url: fallbackStreamUrl, direct: false, expires: Date.now() + 1800000 });
+          return send(200, { success: true, url: fallbackStreamUrl, direct: false });
         } catch (e) {
-          return send(200, { success: true, url: `/api/stream/${encodeURIComponent(sid)}/${encodeURIComponent(vid)}`, direct: false });
+          return send(200, { success: true, url: `/api/stream/${encodeURIComponent(sid)}/${encodeURIComponent(vid)}?quality=${encodeURIComponent(quality)}`, direct: false });
         }
       }
       const streamRoute = /^\/api\/stream\/([a-zA-Z0-9_-]+)\/([a-zA-Z0-9_-]+)$/.exec(route);
       if (streamRoute && request.method === 'GET') {
         const sid = streamRoute[1];
         const vid = streamRoute[2];
-        const cacheKey = `${sid}:${vid}`;
+        const quality = url.searchParams.get('quality') || '480p';
+        const cacheKey = `${sid}:${vid}:${quality}`;
         try {
           const hongguo = require('../src/native/hongguo.js');
           let playWeb = null;
           const cached = streamCache.get(cacheKey);
-          if (cached && cached.expires > Date.now()) {
+          if (cached && cached.expires > Date.now() && cached.direct) {
             playWeb = { url: cached.url };
-          } else {
+          } else if (['360p', '480p', 'auto'].includes(quality)) {
             try { playWeb = await hongguo.fetchPlayUrlFromWeb(vid, sid); } catch (_) {}
-            if (playWeb?.url) streamCache.set(cacheKey, { url: playWeb.url, expires: Date.now() + 1800000 });
+            if (playWeb?.url) streamCache.set(cacheKey, { url: playWeb.url, direct: true, expires: Date.now() + 1800000 });
           }
 
           if (playWeb?.url) {
@@ -304,6 +310,14 @@ function createApp({ token, dataRoot, downloadRoot, media = defaultMedia, search
           const ffmpegPath = process.env.FFMPEG_PATH || (process.platform === 'win32' ? 'C:\\ffmpeg\\bin\\ffmpeg.exe' : 'ffmpeg');
           const hasFfmpeg = fs.existsSync(ffmpegPath) || process.platform !== 'win32';
 
+          const qualityProfiles = {
+            '360p': { scale: 'scale=-2:360', crf: '31', maxrate: '380k', bufsize: '760k' },
+            '480p': { scale: 'scale=-2:480', crf: '28', maxrate: '650k', bufsize: '1300k' },
+            '720p': { scale: 'scale=-2:720', crf: '24', maxrate: '1400k', bufsize: '2800k' },
+            '1080p': { scale: 'scale=-2:1080', crf: '22', maxrate: '2600k', bufsize: '5200k' }
+          };
+          const profile = qualityProfiles[quality] || qualityProfiles['480p'];
+
           if ((key || play.codec === 'hevc') && hasFfmpeg) {
             const { spawn } = require('node:child_process');
             const ffmpegArgs = [
@@ -314,13 +328,13 @@ function createApp({ token, dataRoot, downloadRoot, media = defaultMedia, search
               '-headers', `User-Agent: ${play.userAgent || hongguo.UA}\r\n`,
               ...(key ? ['-decryption_key', key] : []),
               '-i', play.url,
-              '-vf', 'scale=-2:480',
+              '-vf', profile.scale,
               '-c:v', 'libx264',
               '-preset', 'ultrafast',
               '-tune', 'zerolatency',
-              '-crf', '29',
-              '-maxrate', '600k',
-              '-bufsize', '1200k',
+              '-crf', profile.crf,
+              '-maxrate', profile.maxrate,
+              '-bufsize', profile.bufsize,
               '-c:a', 'copy',
               '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
               '-f', 'mp4',
