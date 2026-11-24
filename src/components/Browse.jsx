@@ -404,7 +404,7 @@ function Browse({ onNavigate, active = true }) {
 
   const gotoPage = (p) => {
     if (meta.cursorExpired) return;
-    const max = meta.totalPages || (meta.page || page) + (meta.hasMore ? 1 : 0);
+    const max = meta.totalPages || (meta.hasMore === false ? (meta.page || page) : 50);
     const next = Math.min(Math.max(1, p), max);
     if (next === page) {
       if (error) loadList(category, genre, next);
@@ -705,7 +705,7 @@ function Browse({ onNavigate, active = true }) {
       )}
 
       {/* 分页 */}
-      {totalPages > 1 && (
+      {totalPages > 1 ? (
         <div className="browse-pager">
           <button className="pager-item" aria-label={t("上一页")} disabled={displayedPage <= 1 || meta.cursorExpired} onClick={() => gotoPage(displayedPage - 1)}>‹</button>
           {pageNumbers.map((n, i) => (
@@ -722,9 +722,13 @@ function Browse({ onNavigate, active = true }) {
           ))}
           <button className="pager-item" aria-label={t("下一页")} disabled={displayedPage >= totalPages || meta.cursorExpired} onClick={() => gotoPage(displayedPage + 1)}>›</button>
         </div>
-      )}
-
-      {!totalPages && (displayedPage > 1 || meta.hasMore) && <div className="browse-pager"><button className="pager-item" disabled={displayedPage <= 1 || loading || meta.cursorExpired} onClick={() => gotoPage(displayedPage - 1)}>{t("上一页")}</button><span>{t("第 {0} 页", [displayedPage])}</span><button className="pager-item" disabled={!meta.hasMore || loading || meta.cursorExpired} onClick={() => gotoPage(displayedPage + 1)}>{t("下一页")}</button></div>}
+      ) : (results.length > 0) ? (
+        <div className="browse-pager">
+          <button className="pager-item" disabled={displayedPage <= 1 || loading || meta.cursorExpired} onClick={() => gotoPage(displayedPage - 1)}>{t("上一页")}</button>
+          <span>{t("第 {0} 页", [displayedPage])}</span>
+          <button className="pager-item" disabled={loading || meta.cursorExpired || (meta.hasMore === false && results.length < 8)} onClick={() => gotoPage(displayedPage + 1)}>{t("下一页")}</button>
+        </div>
+      ) : null}
 
       {/* ===== 剧集详情抽屉 ===== */}
       {(detail || detailLoading) && (

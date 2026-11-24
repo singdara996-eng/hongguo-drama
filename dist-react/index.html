@@ -210,10 +210,10 @@
                   cover: item.cover ? (item.cover.startsWith('http') && !item.cover.includes('proxy-image') ? (`${apiBase}/api/proxy-image?url=` + encodeURIComponent(item.cover)) : (item.cover.startsWith('/api') ? `${apiBase}${item.cover}` : item.cover)) : ''
                 })),
                 total: data.total || (data.results || []).length,
-                totalPages: data.totalPages || 1,
+                totalPages: typeof data.totalPages === 'number' ? data.totalPages : 0,
                 genres: (cat === 'comic') ? [] : (data.genres !== undefined ? data.genres : defaultGenres),
                 page: data.page || pg,
-                hasMore: Boolean(data.hasMore)
+                hasMore: data.hasMore !== undefined ? Boolean(data.hasMore) : ((data.results || []).length >= 8)
               };
             } catch (err) {
               console.error('browseList error:', err);
@@ -414,7 +414,7 @@
         });
       })();
     </script>
-    <script type="module" crossorigin src="./assets/index-C9noeJgA.js"></script>
+    <script type="module" crossorigin src="./assets/index-Bx9OpDyB.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-BK7o7fDJ.css">
   </head>
   <body>
