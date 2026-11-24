@@ -120,7 +120,7 @@ function parseCatalog(html, category, page, sourceUrl) {
     { slug: 'magic', label: 'Magic' }
   ];
 
-  const currentGenres = category === 'comic-drama' ? ANIMATED_GENRES : LIVE_ACTION_GENRES;
+  const currentGenres = category === 'comic-drama' ? ANIMATED_GENRES : (category === 'comic' ? [] : LIVE_ACTION_GENRES);
 
   return { success: true, results, page: Number(data.pagination?.pageNum) || page,
     total: Number(data.pagination?.total) || 0, totalPages: Number(data.pagination?.totalPages) || 0,
