@@ -148,8 +148,13 @@ function createApp({ token, dataRoot, downloadRoot, media = defaultMedia, search
           const { browseList } = require('../src/native/catalog.js');
           let catalog = await browseList({ category, genre, page });
           if (!catalog || !catalog.results || !catalog.results.length) {
-            const appCat = require('../src/native/hongguo-app-catalog.js');
-            catalog = await appCat.browseList({ category, genre, page });
+            try {
+              const appCat = require('../src/native/hongguo-app-catalog.js');
+              catalog = await appCat.browseList({ category, genre, page });
+            } catch {}
+          }
+          if (!catalog || !catalog.results || !catalog.results.length) {
+            catalog = await browseList({ category, genre: '', page });
           }
           if (catalog && Array.isArray(catalog.results)) {
             catalog.results = catalog.results.map(item => ({
@@ -160,8 +165,8 @@ function createApp({ token, dataRoot, downloadRoot, media = defaultMedia, search
           return send(200, catalog);
         } catch (e) {
           try {
-            const appCat = require('../src/native/hongguo-app-catalog.js');
-            const catalog = await appCat.browseList({ category, genre, page });
+            const { browseList } = require('../src/native/catalog.js');
+            const catalog = await browseList({ category, genre: '', page });
             if (catalog && Array.isArray(catalog.results)) {
               catalog.results = catalog.results.map(item => ({
                 ...item,

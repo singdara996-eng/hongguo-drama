@@ -66,7 +66,7 @@ function parseCatalog(html, category, page, sourceUrl) {
     ...publicMetadata(item),
     url: `${SITE}/detail?series_id=${item.series_id}`,
   }));
-  const ORDERED_GENRES = [
+  const LIVE_ACTION_GENRES = [
     { slug: 'action', label: 'Action' },
     { slug: 'adventure', label: 'Adventure' },
     { slug: 'magic', label: 'Magic' },
@@ -94,9 +94,41 @@ function parseCatalog(html, category, page, sourceUrl) {
     { slug: 'thriller', label: 'Thriller' },
     { slug: 'horror', label: 'Horror' }
   ];
+
+  const ANIMATED_GENRES = [
+    { slug: 'action', label: 'Action' },
+    { slug: 'variety', label: 'Variety shows' },
+    { slug: 'romance', label: 'Romance' },
+    { slug: 'costume', label: 'Period stories' },
+    { slug: 'comeback', label: 'Comeback' },
+    { slug: 'legend', label: 'Legends' },
+    { slug: 'growth', label: 'Coming of age' },
+    { slug: 'family', label: 'Family' },
+    { slug: 'clan', label: 'Family saga' },
+    { slug: 'cute-kids', label: 'Children' },
+    { slug: 'suspense', label: 'Suspense' },
+    { slug: 'thriller', label: 'Thriller' },
+    { slug: 'horror', label: 'Horror' },
+    { slug: 'supernatural', label: 'Supernatural tales' },
+    { slug: 'period', label: 'Period' },
+    { slug: 'fantasy', label: 'Fantasy' },
+    { slug: 'wonder', label: 'Fantasy' },
+    { slug: 'urban', label: 'Urban' },
+    { slug: 'youth', label: 'Youth' },
+    { slug: 'comedy', label: 'Comedy' },
+    { slug: 'sci-fi', label: 'Science fiction' },
+    { slug: 'disaster', label: 'Disaster' },
+    { slug: 'adventure', label: 'Adventure' },
+    { slug: 'war', label: 'War' },
+    { slug: 'drama', label: 'Drama' },
+    { slug: 'magic', label: 'Magic' }
+  ];
+
+  const currentGenres = category === 'comic-drama' ? ANIMATED_GENRES : LIVE_ACTION_GENRES;
+
   return { success: true, results, page: Number(data.pagination?.pageNum) || page,
     total: Number(data.pagination?.total) || 0, totalPages: Number(data.pagination?.totalPages) || 0,
-    genres: ORDERED_GENRES, pageTitle, sourceUrl };
+    genres: currentGenres, pageTitle, sourceUrl };
 }
 
 function decodeHtml(value) {
