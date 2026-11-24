@@ -9,10 +9,7 @@
 !server/
 !server/**
 !src/
-!src/native/
-!src/native/**
-!build/
-!build/ffmpeg/
-!build/ffmpeg/linux-x64/
-!build/ffmpeg/linux-x64/**
+!src/**
+!dist-react/
+!dist-react/**
 server/**/*.test.cjs
