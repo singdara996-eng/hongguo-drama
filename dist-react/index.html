@@ -179,13 +179,17 @@
           loadingEl.style.display = 'block';
           loadingEl.textContent = `កំពុងភ្ជាប់ភាគ ${index}...`;
 
+          videoEl.onplaying = () => {
+            loadingEl.style.display = 'none';
+          };
+          videoEl.onerror = () => {
+            loadingEl.style.display = 'block';
+            loadingEl.textContent = 'បរាជ័យក្នុងការចាក់វីដេអូភាគនេះ';
+          };
+
           videoEl.src = `${apiBase}/api/stream/${encodeURIComponent(currentSeriesId)}/${encodeURIComponent(ep.vid)}`;
           videoEl.load();
-          videoEl.play().then(() => {
-            loadingEl.style.display = 'none';
-          }).catch(() => {
-            loadingEl.style.display = 'none';
-          });
+          videoEl.play().catch(() => {});
         };
 
         // Real-time task progress poller

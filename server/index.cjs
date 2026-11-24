@@ -231,16 +231,80 @@ function createApp({ token, dataRoot, downloadRoot, media = defaultMedia, search
         const vid = streamRoute[2];
         try {
           const hongguo = require('../src/native/hongguo.js');
+          const axios = require('axios');
+          let playWeb = null;
+          try {
+            playWeb = await hongguo.fetchPlayUrlFromWeb(vid, sid);
+          } catch (_) {}
+
+          if (playWeb?.url) {
+            const headers = {
+              'User-Agent': playWeb.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+              'Referer': playWeb.referer || 'https://hongguoduanju.com/',
+              'Accept-Encoding': 'identity'
+            };
+            if (request.headers.range) {
+              headers['Range'] = request.headers.range;
+            }
+            const upstream = await axios.get(playWeb.url, {
+              headers,
+              responseType: 'stream',
+              validateStatus: status => status >= 200 && status < 400
+            });
+            response.statusCode = upstream.status;
+            for (const [k, v] of Object.entries(upstream.headers)) {
+              if (['content-type', 'content-range', 'content-length', 'accept-ranges'].includes(k.toLowerCase())) {
+                response.setHeader(k, v);
+              }
+            }
+            response.setHeader('Access-Control-Allow-Origin', '*');
+            return upstream.data.pipe(response);
+          }
+
           const play = await hongguo.fetchPlayUrlSingle(vid, sid);
           if (!play?.url) throw fail('无法获取视频播放地址', 404);
+          const key = play.contentKey || (play.spadeA ? hongguo.deriveKey(play.spadeA)?.toString('hex') : null);
+
+          const ffmpegPath = process.env.FFMPEG_PATH || (process.platform === 'win32' ? 'C:\\ffmpeg\\bin\\ffmpeg.exe' : 'ffmpeg');
+          const hasFfmpeg = fs.existsSync(ffmpegPath) || process.platform !== 'win32';
+
+          if ((key || play.codec === 'hevc') && hasFfmpeg) {
+            const { spawn } = require('node:child_process');
+            const ffmpegArgs = [
+              '-v', 'error',
+              '-headers', `User-Agent: ${play.userAgent || hongguo.UA}\r\n`,
+              ...(key ? ['-decryption_key', key] : []),
+              '-i', play.url,
+              '-c:v', 'libx264',
+              '-preset', 'ultrafast',
+              '-tune', 'zerolatency',
+              '-c:a', 'copy',
+              '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+              '-f', 'mp4',
+              'pipe:1'
+            ];
+            const proc = spawn(ffmpegPath, ffmpegArgs);
+            response.writeHead(200, {
+              'Content-Type': 'video/mp4',
+              'Access-Control-Allow-Origin': '*',
+              'Cache-Control': 'no-cache'
+            });
+            proc.stdout.pipe(response);
+            request.on('close', () => proc.kill());
+            response.on('close', () => proc.kill());
+            proc.on('error', () => {
+              if (!response.headersSent) send(500, { success: false, error: '转码失败' });
+            });
+            return;
+          }
+
           const headers = {
-            'User-Agent': play.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'User-Agent': play.userAgent || hongguo.UA,
             'Accept-Encoding': 'identity'
           };
           if (request.headers.range) {
             headers['Range'] = request.headers.range;
           }
-          const axios = require('axios');
           const upstream = await axios.get(play.url, {
             headers,
             responseType: 'stream',
