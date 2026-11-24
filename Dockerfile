@@ -3,8 +3,11 @@ FROM node:20-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production PORT=3000 DATA_DIR=/data DOWNLOAD_DIR=/downloads HONGGUO_TOKEN=1234567890abcdef1234567890abcdef
 
-# Install ffmpeg
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+# Install ffmpeg and create symlinks for librempeg
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/* && \
+    ln -sf $(which ffmpeg) /usr/local/bin/ffmpeg && \
+    ln -sf $(which ffprobe) /usr/local/bin/ffprobe && \
+    ln -sf $(which ffmpeg) /usr/local/bin/librempeg
 
 # Install production dependencies
 COPY package*.json ./

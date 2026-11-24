@@ -14,9 +14,18 @@ const { fail, numericId } = require('./storage.cjs');
 const { throwIfAborted } = require('../src/native/request-signal');
 const { localMediaEnv } = require('../src/native/child-env');
 const MAX_BYTES = 1024 * 1024 * 1024;
-const defaultFfmpeg = process.platform === 'win32' ? (process.env.FFMPEG_PATH || 'C:\\ffmpeg\\bin\\ffmpeg.exe') : '/usr/local/bin/ffmpeg';
-const defaultFfprobe = process.platform === 'win32' ? (process.env.FFPROBE_PATH || 'C:\\ffmpeg\\bin\\ffprobe.exe') : '/usr/local/bin/ffprobe';
-const defaultLibrempeg = process.platform === 'win32' ? (process.env.LIBREMPEG_PATH || 'C:\\ffmpeg\\bin\\ffmpeg.exe') : '/usr/local/bin/librempeg';
+function resolveBin(name, winDefault) {
+  if (process.platform === 'win32') return process.env[name.toUpperCase() + '_PATH'] || winDefault;
+  if (process.env[name.toUpperCase() + '_PATH']) return process.env[name.toUpperCase() + '_PATH'];
+  for (const candidate of [`/usr/local/bin/${name}`, `/usr/bin/${name}`]) {
+    try { if (fs.existsSync(candidate)) return candidate; } catch {}
+  }
+  return name;
+}
+const defaultFfmpeg = resolveBin('ffmpeg', 'C:\\ffmpeg\\bin\\ffmpeg.exe');
+const defaultFfprobe = resolveBin('ffprobe', 'C:\\ffmpeg\\bin\\ffprobe.exe');
+const rawLibrempeg = resolveBin('librempeg', 'C:\\ffmpeg\\bin\\ffmpeg.exe');
+const defaultLibrempeg = (fs.existsSync(rawLibrempeg) ? rawLibrempeg : defaultFfmpeg);
 const tools = { ffmpeg: process.env.FFMPEG_PATH || defaultFfmpeg, ffprobe: process.env.FFPROBE_PATH || defaultFfprobe, librempeg: process.env.LIBREMPEG_PATH || defaultLibrempeg };
 function run(executable, args, signal, timeout = 60000) {
   return new Promise((resolve, reject) => execFile(executable, args, { signal, timeout, maxBuffer: 4 * 1024 * 1024, env: localMediaEnv() }, (error, stdout, stderr) => {

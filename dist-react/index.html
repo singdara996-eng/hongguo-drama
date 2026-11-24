@@ -358,6 +358,33 @@
             } catch (err) {
               return { success: false, error: String(err) };
             }
+          },
+          openFolder: (id) => {
+            try {
+              const a = document.createElement('a');
+              a.href = `${apiBase}/api/files/${id}`;
+              a.target = '_blank';
+              a.download = '';
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              return pResolve({ success: true });
+            } catch (err) {
+              return pResolve({ success: false, error: String(err) });
+            }
+          },
+          openFile: (id) => {
+            try {
+              const a = document.createElement('a');
+              a.href = `${apiBase}/api/files/${id}`;
+              a.target = '_blank';
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              return pResolve({ success: true });
+            } catch (err) {
+              return pResolve({ success: false, error: String(err) });
+            }
           }
         }, {
           get(target, prop) {
