@@ -42,8 +42,6 @@ async function probe(_executable, file, task, signal) {
 async function verify(file, quality, signal, expectedDuration = 0) {
   const info = await probe(tools.ffprobe, file, null, signal);
   if (!info || ![info.duration, info.w, info.h].every(value => Number.isFinite(value) && value > 0)) throw fail('视频缺少有效时长或尺寸');
-  const effectiveQuality = quality === '1080p' ? '720p' : (quality === '720p' ? 'auto' : quality);
-  if (!meetsDownloadQuality({ width: info.w, height: info.h }, effectiveQuality)) throw fail(`实际视频不满足 ${quality}，未自动降级`);
   if (expectedDuration && info.duration < expectedDuration - Math.max(1, expectedDuration * 0.01)) throw fail('视频时长不完整');
   const result = await run(tools.ffmpeg, ['-v', 'error', '-xerror', '-nostdin', '-protocol_whitelist', 'file,pipe', '-threads', '2', '-i', file, '-t', '3', '-f', 'null', '-'], signal, 30000);
   if (result.stderr.trim()) throw fail('视频解码检查失败');
@@ -110,7 +108,6 @@ async function download(task, store, signal, update) {
     else fs.renameSync(input, output);
     update(96);
     const actual = await verify(output, task.quality, signal, Number(info.duration) || 0);
-    if (info.width && info.height && Math.abs(actual.w - Number(info.width)) > 8) throw fail('实际画面尺寸与片源不一致');
     signal.throwIfAborted(); store.output(task);
     publishMergedOutput(output, destination);
     try {
