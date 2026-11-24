@@ -154,7 +154,7 @@ function createApp({ token, dataRoot, downloadRoot, media = defaultMedia, search
           if (catalog && Array.isArray(catalog.results)) {
             catalog.results = catalog.results.map(item => ({
               ...item,
-              cover: item.cover ? (item.cover.includes('/api/proxy-image') ? item.cover : ('http://localhost:3000/api/proxy-image?url=' + encodeURIComponent(item.cover))) : ''
+              cover: item.cover ? (item.cover.includes('/api/proxy-image') ? item.cover : ('/api/proxy-image?url=' + encodeURIComponent(item.cover))) : ''
             }));
           }
           return send(200, catalog);
@@ -165,7 +165,7 @@ function createApp({ token, dataRoot, downloadRoot, media = defaultMedia, search
             if (catalog && Array.isArray(catalog.results)) {
               catalog.results = catalog.results.map(item => ({
                 ...item,
-                cover: item.cover ? (item.cover.includes('/api/proxy-image') ? item.cover : ('http://localhost:3000/api/proxy-image?url=' + encodeURIComponent(item.cover))) : ''
+                cover: item.cover ? (item.cover.includes('/api/proxy-image') ? item.cover : ('/api/proxy-image?url=' + encodeURIComponent(item.cover))) : ''
               }));
             }
             return send(200, catalog);
@@ -192,7 +192,7 @@ function createApp({ token, dataRoot, downloadRoot, media = defaultMedia, search
             const results = (result.results || []).filter(item => /^\d{1,30}$/.test(String(item.series_id))).map(item => ({
               series_id: String(item.series_id),
               series_title: String(item.series_title || ''),
-              cover: item.cover ? (item.cover.includes('/api/proxy-image') ? item.cover : ('http://localhost:3000/api/proxy-image?url=' + encodeURIComponent(item.cover))) : '',
+              cover: item.cover ? (item.cover.includes('/api/proxy-image') ? item.cover : ('/api/proxy-image?url=' + encodeURIComponent(item.cover))) : '',
               total: item.total || item.episode_count || 0
             }));
             return send(200, { success: true, results, page, hasMore: result.hasMore === true || result.has_more === true });
