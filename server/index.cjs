@@ -29,6 +29,7 @@ function createApp({ token, dataRoot, downloadRoot, media = defaultMedia, search
   const store = new Storage(dataRoot, downloadRoot);
   let active, stopped = false, reading = 0, shuttingDown, nextDownloadAt = 0, downloadTimer;
   const controllerById = new Map();
+  const streamCache = new Map();
   const authorized = request => crypto.timingSafeEqual(digest, crypto.createHash('sha256').update(String(request.headers.authorization || '')).digest());
   function drain() {
     if (active || stopped) return;
@@ -225,19 +226,54 @@ function createApp({ token, dataRoot, downloadRoot, media = defaultMedia, search
           return send(200, { success: true, series: await media.series(numericId(route.split('/').pop())) });
         } finally { reading--; }
       }
+      const streamUrlRoute = /^\/api\/stream-url\/([a-zA-Z0-9_-]+)\/([a-zA-Z0-9_-]+)$/.exec(route);
+      if (streamUrlRoute && request.method === 'GET') {
+        const sid = streamUrlRoute[1];
+        const vid = streamUrlRoute[2];
+        const cacheKey = `${sid}:${vid}`;
+        const cached = streamCache.get(cacheKey);
+        if (cached && cached.expires > Date.now()) {
+          return send(200, { success: true, url: cached.url, direct: true });
+        }
+        try {
+          const hongguo = require('../src/native/hongguo.js');
+          let playWeb = null;
+          try { playWeb = await hongguo.fetchPlayUrlFromWeb(vid, sid); } catch (_) {}
+          if (playWeb?.url) {
+            streamCache.set(cacheKey, { url: playWeb.url, expires: Date.now() + 1800000 });
+            return send(200, { success: true, url: playWeb.url, direct: true });
+          }
+          return send(200, { success: true, url: `/api/stream/${encodeURIComponent(sid)}/${encodeURIComponent(vid)}`, direct: false });
+        } catch (e) {
+          return send(200, { success: true, url: `/api/stream/${encodeURIComponent(sid)}/${encodeURIComponent(vid)}`, direct: false });
+        }
+      }
       const streamRoute = /^\/api\/stream\/([a-zA-Z0-9_-]+)\/([a-zA-Z0-9_-]+)$/.exec(route);
       if (streamRoute && request.method === 'GET') {
         const sid = streamRoute[1];
         const vid = streamRoute[2];
+        const cacheKey = `${sid}:${vid}`;
         try {
           const hongguo = require('../src/native/hongguo.js');
-          const axios = require('axios');
           let playWeb = null;
-          try {
-            playWeb = await hongguo.fetchPlayUrlFromWeb(vid, sid);
-          } catch (_) {}
+          const cached = streamCache.get(cacheKey);
+          if (cached && cached.expires > Date.now()) {
+            playWeb = { url: cached.url };
+          } else {
+            try { playWeb = await hongguo.fetchPlayUrlFromWeb(vid, sid); } catch (_) {}
+            if (playWeb?.url) streamCache.set(cacheKey, { url: playWeb.url, expires: Date.now() + 1800000 });
+          }
 
           if (playWeb?.url) {
+            if (url.searchParams.get('proxy') !== '1') {
+              response.writeHead(302, {
+                'Location': playWeb.url,
+                'Access-Control-Allow-Origin': '*',
+                'Cache-Control': 'public, max-age=1800'
+              });
+              return response.end();
+            }
+            const axios = require('axios');
             const headers = {
               'User-Agent': playWeb.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
               'Referer': playWeb.referer || 'https://hongguoduanju.com/',
@@ -272,12 +308,17 @@ function createApp({ token, dataRoot, downloadRoot, media = defaultMedia, search
             const { spawn } = require('node:child_process');
             const ffmpegArgs = [
               '-v', 'error',
+              '-fflags', '+nobuffer+flush_packets',
+              '-analyzeduration', '1000000',
+              '-probesize', '1000000',
               '-headers', `User-Agent: ${play.userAgent || hongguo.UA}\r\n`,
               ...(key ? ['-decryption_key', key] : []),
               '-i', play.url,
+              '-vf', 'scale=-2:720',
               '-c:v', 'libx264',
               '-preset', 'ultrafast',
               '-tune', 'zerolatency',
+              '-crf', '26',
               '-c:a', 'copy',
               '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
               '-f', 'mp4',

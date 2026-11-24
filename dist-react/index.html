@@ -68,6 +68,7 @@
         let currentSeriesTitle = '';
         let currentSeriesId = '';
         let currentVidIndex = 1;
+        const preloadedUrls = new Map();
 
         window.openWebPlayer = async function(seriesId, vidIndex = 1) {
           let modal = document.getElementById('web-player-modal');
@@ -81,19 +82,53 @@
                 <button id="web-player-close" style="background:#27272a; border:1px solid #3f3f46; color:#fff; font-size:18px; width:36px; height:36px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s;">✕</button>
               </div>
               <div style="position:relative; width:100%; max-width:880px; background:#000; border-radius:12px; overflow:hidden; box-shadow:0 12px 48px rgba(0,0,0,0.9); display:flex; justify-content:center; align-items:center; aspect-ratio:16/9; max-height:70vh;">
-                <video id="web-player-video" controls autoplay playsinline style="width:100%; height:100%; object-fit:contain; background:#000; outline:none;"></video>
+                <video id="web-player-video" controls autoplay playsinline preload="auto" style="width:100%; height:100%; object-fit:contain; background:#000; outline:none;"></video>
                 <div id="web-player-loading" style="position:absolute; color:#fff; font-size:15px; background:rgba(0,0,0,0.75); padding:10px 20px; border-radius:8px; display:none; pointer-events:none;">កំពុងទាញយកវីដេអូ...</div>
               </div>
               <div style="width:100%; max-width:880px; display:flex; justify-content:space-between; align-items:center; margin-top:14px; gap:10px; flex-wrap:wrap;">
                 <button id="web-player-prev" style="background:#27272a; border:1px solid #3f3f46; color:#fff; padding:8px 16px; border-radius:6px; cursor:pointer; font-size:13.5px;">‹ ភាគមុន (Prev)</button>
                 <div style="display:flex; align-items:center; gap:8px;">
                   <label style="color:#a1a1aa; font-size:13px;">ជ្រើសភាគ:</label>
-                  <select id="web-player-select" style="background:#18181b; border:1px solid #3f3f46; color:#fff; padding:6px 12px; border-radius:6px; font-size:13.5px; outline:none; cursor:pointer; max-width:220px;"></select>
+                  <select id="web-player-select" style="background:#18181b; border:1px solid #3f3f46; color:#fff; padding:6px 12px; border-radius:6px; font-size:13.5px; outline:none; cursor:pointer; max-width:200px;"></select>
+                </div>
+                <!-- Playback Speed Controls -->
+                <div style="display:flex; align-items:center; gap:6px;">
+                  <span style="color:#a1a1aa; font-size:13px;">ល្បឿន:</span>
+                  <div id="web-player-speeds" style="display:flex; gap:3px; background:#18181b; padding:2px; border-radius:6px; border:1px solid #3f3f46;">
+                    <button type="button" data-speed="1" class="web-speed-btn" style="background:#c8383d; color:#fff; border:none; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">1x</button>
+                    <button type="button" data-speed="1.25" class="web-speed-btn" style="background:transparent; color:#d4d4d8; border:none; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">1.25x</button>
+                    <button type="button" data-speed="1.5" class="web-speed-btn" style="background:transparent; color:#d4d4d8; border:none; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">1.5x</button>
+                    <button type="button" data-speed="2" class="web-speed-btn" style="background:transparent; color:#d4d4d8; border:none; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">2x</button>
+                  </div>
                 </div>
                 <button id="web-player-next" style="background:#c8383d; border:none; color:#fff; padding:8px 16px; border-radius:6px; cursor:pointer; font-size:13.5px; font-weight:600;">ភាគបន្ទាប់ (Next) ›</button>
               </div>
             `;
             document.body.appendChild(modal);
+
+            const speedBtns = modal.querySelectorAll('.web-speed-btn');
+            function updateActiveSpeedBtn(val) {
+              speedBtns.forEach(b => {
+                if (parseFloat(b.dataset.speed) === val) {
+                  b.style.background = '#c8383d';
+                  b.style.color = '#fff';
+                } else {
+                  b.style.background = 'transparent';
+                  b.style.color = '#d4d4d8';
+                }
+              });
+            }
+            speedBtns.forEach(btn => {
+              btn.onclick = () => {
+                const speed = parseFloat(btn.dataset.speed) || 1;
+                const vid = document.getElementById('web-player-video');
+                if (vid) vid.playbackRate = speed;
+                localStorage.setItem('web_player_speed', String(speed));
+                updateActiveSpeedBtn(speed);
+              };
+            });
+            const savedSpeed = parseFloat(localStorage.getItem('web_player_speed')) || 1;
+            updateActiveSpeedBtn(savedSpeed);
 
             document.getElementById('web-player-close').onclick = () => {
               const vid = document.getElementById('web-player-video');
@@ -121,10 +156,22 @@
             };
 
             document.addEventListener('keydown', (e) => {
-              if (e.key === 'Escape' && modal.style.display !== 'none') {
-                const vid = document.getElementById('web-player-video');
-                if (vid) { vid.pause(); vid.src = ''; }
+              if (modal.style.display === 'none') return;
+              const vid = document.getElementById('web-player-video');
+              if (!vid) return;
+
+              if (e.key === 'Escape') {
+                vid.pause(); vid.src = '';
                 modal.style.display = 'none';
+              } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                vid.currentTime = Math.min((vid.duration || 0), vid.currentTime + 5);
+              } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                vid.currentTime = Math.max(0, vid.currentTime - 5);
+              } else if (e.key === ' ') {
+                e.preventDefault();
+                if (vid.paused) vid.play(); else vid.pause();
               }
             });
           }
@@ -179,17 +226,53 @@
           loadingEl.style.display = 'block';
           loadingEl.textContent = `កំពុងភ្ជាប់ភាគ ${index}...`;
 
+          const currentSpeed = parseFloat(localStorage.getItem('web_player_speed')) || 1;
+
           videoEl.onplaying = () => {
             loadingEl.style.display = 'none';
+            videoEl.playbackRate = currentSpeed;
           };
           videoEl.onerror = () => {
             loadingEl.style.display = 'block';
             loadingEl.textContent = 'បរាជ័យក្នុងការចាក់វីដេអូភាគនេះ';
           };
 
-          videoEl.src = `${apiBase}/api/stream/${encodeURIComponent(currentSeriesId)}/${encodeURIComponent(ep.vid)}`;
-          videoEl.load();
-          videoEl.play().catch(() => {});
+          // Check if direct preloaded URL exists for instant playback
+          const preloaded = preloadedUrls.get(ep.vid);
+          if (preloaded) {
+            videoEl.src = preloaded;
+            videoEl.load();
+            videoEl.play().catch(() => {});
+          } else {
+            // Fetch direct CDN stream URL for ultra-fast direct streaming
+            fetch(`${apiBase}/api/stream-url/${encodeURIComponent(currentSeriesId)}/${encodeURIComponent(ep.vid)}`)
+              .then(r => r.json())
+              .then(data => {
+                if (currentVidIndex === index && data?.url) {
+                  videoEl.src = data.url;
+                  videoEl.load();
+                  videoEl.play().catch(() => {});
+                }
+              })
+              .catch(() => {
+                if (currentVidIndex === index) {
+                  videoEl.src = `${apiBase}/api/stream/${encodeURIComponent(currentSeriesId)}/${encodeURIComponent(ep.vid)}`;
+                  videoEl.load();
+                  videoEl.play().catch(() => {});
+                }
+              });
+          }
+
+          // Preload next episode in background for instant transition
+          const nextEp = currentEpisodes.find(e => e.vid_index === index + 1);
+          if (nextEp && !preloadedUrls.has(nextEp.vid)) {
+            fetch(`${apiBase}/api/stream-url/${encodeURIComponent(currentSeriesId)}/${encodeURIComponent(nextEp.vid)}`)
+              .then(r => r.json())
+              .then(data => {
+                if (data?.url) preloadedUrls.set(nextEp.vid, data.url);
+              })
+              .catch(() => {});
+          }
         };
 
         // Real-time task progress poller
