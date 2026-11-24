@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: hongguo-drama
+    env: node
+    plan: free
+    buildCommand: npm install --omit=dev
+    startCommand: node server/index.cjs
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HONGGUO_TOKEN
+        value: 1234567890abcdef1234567890abcdef

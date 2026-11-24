@@ -1,7 +1,8 @@
 export const LANGUAGE_KEY = 'hongguo:language';
-export const LANGUAGE_OPTIONS = ['system', 'zh-CN', 'en'];
+export const LANGUAGE_OPTIONS = ['system', 'zh-CN', 'en', 'km'];
 export function resolveLanguage(preference, locale) {
-  if (preference === 'zh-CN' || preference === 'en') return preference;
+  if (preference === 'zh-CN' || preference === 'en' || preference === 'km') return preference;
+  if (/^km(?:[-_.@]|$)/i.test(String(locale || '').trim())) return 'km';
   return /^zh(?:[-_.@]|$)/i.test(String(locale || '').trim()) ? 'zh-CN' : 'en';
 }
 export function systemLocale(env = {}, locale = '', platform = '') {

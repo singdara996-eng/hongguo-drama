@@ -121,6 +121,7 @@ $('login-form').addEventListener('submit', async (event) => {
     showView('search');
     $('query').focus();
     refreshTasks();
+    loadDiscover();
   } catch (error) {
     if (session === state.session) disconnect(safeMessage(error));
   } finally {
@@ -131,6 +132,42 @@ $('login-form').addEventListener('submit', async (event) => {
 $('logout').addEventListener('click', () => disconnect());
 for (const button of document.querySelectorAll('[data-view]')) button.addEventListener('click', () => showView(button.dataset.view));
 document.querySelector('.brand').addEventListener('click', (event) => { event.preventDefault(); showView('search'); });
+
+async function loadDiscover() {
+  $('search-status').textContent = 'កំពុងផ្ទុកបញ្ជីរឿងភាគល្បីៗ...';
+  $('search-status').hidden = false;
+  $('results-title').textContent = '🔥 រឿងភាគពេញនិយម (Trending Dramas)';
+  try {
+    const data = await api('/discover?ranking=hot-drama');
+    const results = Array.isArray(data.results) ? data.results : [];
+    $('results').replaceChildren();
+    for (const result of results) {
+      const button = element('button', undefined, 'result');
+      button.type = 'button';
+      button.dataset.seriesId = String(result.series_id);
+      button.setAttribute('aria-pressed', String(String(state.series?.series_id) === String(result.series_id)));
+      if (result.cover) {
+        try {
+          const img = element('img');
+          img.src = '/api/proxy-image?url=' + encodeURIComponent(result.cover);
+          img.alt = result.series_title || '';
+          img.loading = 'lazy';
+          button.append(img);
+        } catch { /* Ignore */ }
+      }
+      const label = element('span', undefined, 'result-info');
+      label.append(element('span', result.series_title || '未命名剧集', 'result-title'));
+      label.append(element('span', result.episode_label || (result.episode_count ? `全${result.episode_count}集` : '查看分集'), 'result-meta'));
+      button.append(label);
+      button.addEventListener('click', () => loadSeries(result.series_id));
+      $('results').append(button);
+    }
+    $('search-status').hidden = results.length > 0;
+  } catch (error) {
+    console.error('Discover error:', error);
+    $('search-status').textContent = 'សូមបញ្ចូលឈ្មោះរឿងក្នុងប្រអប់ដើម្បីស្វែងរក...';
+  }
+}
 
 async function search(page) {
   const query = $('query').value.trim();
@@ -157,14 +194,11 @@ async function search(page) {
       button.dataset.seriesId = String(result.series_id);
       button.setAttribute('aria-pressed', String(String(state.series?.series_id) === String(result.series_id)));
       try {
-        const cover = new URL(result.cover);
-        if (cover.protocol === 'https:' && !cover.username && !cover.password) {
+        if (result.cover) {
           const img = element('img');
-          img.src = cover.href;
+          img.src = '/api/proxy-image?url=' + encodeURIComponent(result.cover);
           img.alt = '';
           img.loading = 'lazy';
-          img.referrerPolicy = 'no-referrer';
-          img.addEventListener('error', () => img.remove(), { once: true });
           button.append(img);
         }
       } catch { /* Missing covers do not block selecting a series. */ }
@@ -213,7 +247,15 @@ async function loadSeries(id) {
     const episodes = Array.isArray(state.series?.episodes) ? state.series.episodes : [];
     if (!episodes.length) throw new Error('这部剧暂未提供可下载分集，请稍后重试。');
     $('detail-title').textContent = state.series.series_title || '未命名剧集';
-    $('episode-total').textContent = `共 ${episodes.length} 集 · 选择需要下载的分集`;
+    $('episode-total').textContent = `共 ${episodes.length} 集 · ជ្រើសរើសភាគដើម្បីទាញយក`;
+    if (state.series.cover) {
+      const existingImg = document.querySelector('.detail-cover');
+      if (existingImg) existingImg.remove();
+      const coverImg = element('img', undefined, 'detail-cover');
+      coverImg.src = '/api/proxy-image?url=' + encodeURIComponent(state.series.cover);
+      coverImg.style = 'width: 120px; border-radius: 8px; margin-bottom: 12px; object-fit: cover; aspect-ratio: 3/4;';
+      document.querySelector('.detail-heading').prepend(coverImg);
+    }
     $('episodes').replaceChildren();
     for (const episode of episodes) {
       const label = element('label', undefined, 'episode');

@@ -141,8 +141,8 @@ function HongguoDownload({ onNavigate, active = true }) {
     setTab('input');
     setSeriesData(data);
     clearTextExport();
-    setSelectedVids(new Set(data.episodes.filter((ep) => !ep.locked).map((ep) => ep.vid)));
-    setSuccessMsg(`已选中《${data.series_title}》共 ${data.total} 集，可直接播放或提交下载`);
+    setSelectedVids(new Set());
+    setSuccessMsg(`已加载《${data.series_title}》共 ${data.total} 集，请勾选要下载的集数或直接播放`);
     document.querySelector('.main-content:not([hidden])')?.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -169,10 +169,9 @@ function HongguoDownload({ onNavigate, active = true }) {
       if (request !== resolveRequest.current) return;
       if (res?.success && res.data) {
         setSeriesData(res.data);
-        // 默认全选，网页未提供的集数自动尝试 App 片源。
-        const allVids = new Set(res.data.episodes.filter((ep) => !ep.locked).map((ep) => ep.vid));
-        setSelectedVids(allVids);
-        setSuccessMsg(`解析成功！找到《${res.data.series_title}》共 ${res.data.total} 集`);
+        // 默认不勾选，由用户按需勾选单集或点击全选
+        setSelectedVids(new Set());
+        setSuccessMsg(`解析成功！找到《${res.data.series_title}》共 ${res.data.total} 集，请勾选要下载的集数`);
       } else {
         setErrorMsg(res?.error || '解析失败，请检查链接或网络');
       }

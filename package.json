@@ -5,7 +5,8 @@
   "main": "main.js",
   "license": "GPL-3.0",
   "scripts": {
-    "start": "electron .",
+    "start": "node server/index.cjs",
+    "start:electron": "electron .",
     "dev": "node scripts/dev.js",
     "dev:react": "vite",
     "build:react": "vite build",

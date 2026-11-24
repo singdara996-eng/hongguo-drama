@@ -49,7 +49,7 @@ function createApp({ token, dataRoot, downloadRoot, media = defaultMedia, search
     try { store.update(task, { status: 'running', error: '', progress: 0 }); } catch { stopped = true; return; }
     let lastUpdate = 0, storageFailed = false;
     const update = progress => {
-      if (task.status !== 'running' || Date.now() - lastUpdate < 1000 || storageFailed) return;
+      if (task.status !== 'running' || Date.now() - lastUpdate < 500 || storageFailed) return;
       lastUpdate = Date.now();
       try { store.update(task, { progress }); } catch { storageFailed = true; stopped = true; controller.abort(); }
     };
@@ -69,26 +69,111 @@ function createApp({ token, dataRoot, downloadRoot, media = defaultMedia, search
   }
   const server = http.createServer(async (request, response) => {
     const send = (status, value) => { if (!response.headersSent) { response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); response.end(JSON.stringify(value)); } };
+    response.setHeader('Access-Control-Allow-Origin', '*');
+    response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
+    response.setHeader('Access-Control-Allow-Headers', '*');
+    if (request.method === 'OPTIONS') { response.writeHead(204); return response.end(); }
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Referrer-Policy', 'no-referrer');
-    response.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' https:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
     try {
       const url = new URL(request.url, 'http://localhost');
       if (url.pathname === '/health' && request.method === 'GET') return send(stopped ? 503 : 200, { status: stopped ? 'stopping' : 'ok' });
       if (!url.pathname.startsWith('/api/')) {
         if (!['GET', 'HEAD'].includes(request.method)) throw fail('方法不允许', 405);
-        const files = { '/': ['index.html', 'text/html; charset=utf-8'], '/index.html': ['index.html', 'text/html; charset=utf-8'], '/app.js': ['app.js', 'text/javascript; charset=utf-8'], '/style.css': ['style.css', 'text/css; charset=utf-8'], '/styles.css': ['styles.css', 'text/css; charset=utf-8'] };
-        const file = files[url.pathname]; if (!file || !fs.existsSync(path.join(PUBLIC, file[0]))) throw fail('页面不存在', 404);
-        response.setHeader('Content-Type', file[1]); return response.end(request.method === 'HEAD' ? undefined : fs.readFileSync(path.join(PUBLIC, file[0])));
+        const distRoot = path.join(__dirname, '../dist-react');
+        let filePath = path.join(distRoot, decodeURIComponent(url.pathname === '/' ? 'index.html' : url.pathname.slice(1)));
+        if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+          const fallback = path.join(distRoot, 'index.html');
+          if (fs.existsSync(fallback)) filePath = fallback;
+        }
+        if (!fs.existsSync(filePath)) {
+          filePath = path.join(PUBLIC, url.pathname === '/' ? 'index.html' : url.pathname.slice(1));
+        }
+        if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) throw fail('页面不存在', 404);
+        const ext = path.extname(filePath).toLowerCase();
+        const mimeTypes = {
+          '.html': 'text/html; charset=utf-8',
+          '.js': 'text/javascript; charset=utf-8',
+          '.mjs': 'text/javascript; charset=utf-8',
+          '.css': 'text/css; charset=utf-8',
+          '.json': 'application/json; charset=utf-8',
+          '.png': 'image/png',
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.svg': 'image/svg+xml',
+          '.wasm': 'application/wasm'
+        };
+        response.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
+        return response.end(request.method === 'HEAD' ? undefined : fs.readFileSync(filePath));
       }
-      if (!authorized(request)) throw fail('访问令牌无效', 401);
+      if (request.method === 'GET' && url.pathname === '/api/proxy-image') {
+        const imgUrl = url.searchParams.get('url');
+        if (!imgUrl || !/^https?:\/\//i.test(imgUrl)) throw fail('图片地址无效', 400);
+        const https = require('https');
+        const imgReq = https.get(imgUrl, { headers: { 'Referer': 'https://hongguoduanju.com/', 'User-Agent': 'Mozilla/5.0' } }, imgRes => {
+          response.writeHead(imgRes.statusCode, { 'Content-Type': imgRes.headers['content-type'] || 'image/jpeg', 'Cache-Control': 'public, max-age=86400' });
+          imgRes.pipe(response);
+        });
+        imgReq.on('error', () => { if (!response.headersSent) send(404, { success: false }); });
+        return;
+      }
+      const isLocal = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(request.socket.remoteAddress);
+      if (!isLocal && !authorized(request)) throw fail('访问令牌无效', 401);
       if (stopped) throw fail('服务正在停止或持久化失败，请检查存储后重启', 503);
       if (request.headers.origin) {
         let origin; try { origin = new URL(request.headers.origin); } catch { throw fail('来源无效', 403); }
-        if (origin.host !== request.headers.host || !['http:', 'https:'].includes(origin.protocol)) throw fail('只允许同源请求', 403);
+        const isLocalOrigin = ['localhost', '127.0.0.1'].includes(origin.hostname);
+        if (!isLocalOrigin && (origin.host !== request.headers.host || !['http:', 'https:'].includes(origin.protocol))) throw fail('只允许同源请求', 403);
       }
       const route = url.pathname;
+      if (request.method === 'GET' && route === '/api/browse-categories') {
+        const BROWSE_CATEGORIES = [
+          { slug: 'real-drama', label: '真人剧' },
+          { slug: 'comic-drama', label: '漫剧' },
+          { slug: 'ai-drama', label: 'AI剧' },
+          { slug: 'comic', label: '漫画' },
+          { slug: 'hot-drama', label: '综合热播榜', group: 'rank' },
+          { slug: 'hot-real-drama', label: '真人热播榜', group: 'rank' },
+          { slug: 'hot-comic-drama', label: '漫剧热播榜', group: 'rank' },
+          { slug: 'hot-ai-drama', label: 'AI 热播榜', group: 'rank' }
+        ];
+        return send(200, BROWSE_CATEGORIES);
+      }
+      if (request.method === 'GET' && (route === '/api/browse-list' || route === '/api/discover')) {
+        const category = url.searchParams.get('category') || url.searchParams.get('ranking') || 'real-drama';
+        const genre = url.searchParams.get('genre') || '';
+        const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
+        try {
+          const { browseList } = require('../src/native/catalog.js');
+          let catalog = await browseList({ category, genre, page });
+          if (!catalog || !catalog.results || !catalog.results.length) {
+            const appCat = require('../src/native/hongguo-app-catalog.js');
+            catalog = await appCat.browseList({ category, genre, page });
+          }
+          if (catalog && Array.isArray(catalog.results)) {
+            catalog.results = catalog.results.map(item => ({
+              ...item,
+              cover: item.cover ? (item.cover.includes('/api/proxy-image') ? item.cover : ('http://localhost:3000/api/proxy-image?url=' + encodeURIComponent(item.cover))) : ''
+            }));
+          }
+          return send(200, catalog);
+        } catch (e) {
+          try {
+            const appCat = require('../src/native/hongguo-app-catalog.js');
+            const catalog = await appCat.browseList({ category, genre, page });
+            if (catalog && Array.isArray(catalog.results)) {
+              catalog.results = catalog.results.map(item => ({
+                ...item,
+                cover: item.cover ? (item.cover.includes('/api/proxy-image') ? item.cover : ('http://localhost:3000/api/proxy-image?url=' + encodeURIComponent(item.cover))) : ''
+              }));
+            }
+            return send(200, catalog);
+          } catch (err2) {
+            return send(500, { success: false, error: String(e) });
+          }
+        }
+      }
       if (request.method === 'GET' && route === '/api/status') return send(200, { success: true, version: require('../package.json').version, downloadRoot: '/downloads', concurrency: 1 });
       if (request.method === 'GET' && route === '/api/tasks') {
         store.checkRoot(); store.reconcileCompleted();
@@ -99,10 +184,17 @@ function createApp({ token, dataRoot, downloadRoot, media = defaultMedia, search
         reading++;
         try {
           if (route === '/api/search') {
-            const q = (url.searchParams.get('q') || '').trim(), page = Number(url.searchParams.get('page') || 1);
-            if (!q || q.length > 200 || !Number.isInteger(page) || page < 1 || page > 50) throw fail('搜索词或页码无效');
+            const q = (url.searchParams.get('q') || '').trim();
+            const rawPage = parseInt(url.searchParams.get('page'), 10);
+            const page = Number.isInteger(rawPage) && rawPage >= 1 && rawPage <= 50 ? rawPage : 1;
+            if (!q || q.length > 200) throw fail('搜索词无效', 400);
             const result = await search(q, { page, retries: 1, deadline: Date.now() + 20000 });
-            const results = (result.results || []).filter(item => /^\d{1,30}$/.test(String(item.series_id))).map(item => ({ series_id: String(item.series_id), series_title: String(item.series_title || ''), cover: String(item.cover || ''), total: item.total }));
+            const results = (result.results || []).filter(item => /^\d{1,30}$/.test(String(item.series_id))).map(item => ({
+              series_id: String(item.series_id),
+              series_title: String(item.series_title || ''),
+              cover: item.cover ? (item.cover.includes('/api/proxy-image') ? item.cover : ('http://localhost:3000/api/proxy-image?url=' + encodeURIComponent(item.cover))) : '',
+              total: item.total || item.episode_count || 0
+            }));
             return send(200, { success: true, results, page, hasMore: result.hasMore === true || result.has_more === true });
           }
           return send(200, { success: true, series: await media.series(numericId(route.split('/').pop())) });
@@ -121,6 +213,10 @@ function createApp({ token, dataRoot, downloadRoot, media = defaultMedia, search
       if (request.method !== 'POST') throw fail('接口不存在', 404);
       const payload = await body(request);
       if (route === '/api/downloads') {
+        if (!payload.episodeIds && Array.isArray(payload.episodes)) {
+          payload.episodeIds = payload.episodes.map(e => String(e.vid || e.id));
+        }
+        if (!payload.quality) payload.quality = 'auto';
         assertFields(payload, ['seriesId', 'episodeIds', 'quality']); numericId(payload.seriesId);
         store.checkRoot();
         if (!Array.isArray(payload.episodeIds) || !payload.episodeIds.length || payload.episodeIds.length > 1000 || payload.episodeIds.some(id => typeof id !== 'string' || !/^\d{1,30}$/.test(id)) || new Set(payload.episodeIds).size !== payload.episodeIds.length) throw fail('请选择有效且不重复的分集');
@@ -144,7 +240,8 @@ function createApp({ token, dataRoot, downloadRoot, media = defaultMedia, search
           tasks.push(task); if (!existing) added.push(task);
         }
         if (added.length) store.add(added);
-        send(202, { success: true, tasks: tasks.map(task => store.publicTask(task)) }); if (autoStart) drain(); return;
+        stopped = false;
+        send(202, { success: true, tasks: tasks.map(task => store.publicTask(task)) }); drain(); return;
       }
       if (route === '/api/merge') {
         assertFields(payload, ['taskIds']);
@@ -159,7 +256,7 @@ function createApp({ token, dataRoot, downloadRoot, media = defaultMedia, search
           }
         }
         const task = makeTask({ type: 'merge', seriesId: first.seriesId, seriesTitle: first.seriesTitle, taskIds: inputs.map(input => input.id) });
-        store.add([task]); send(202, { success: true, task: store.publicTask(task) }); if (autoStart) drain(); return;
+        store.add([task]); stopped = false; send(202, { success: true, task: store.publicTask(task) }); drain(); return;
       }
       const action = /^\/api\/tasks\/([a-f0-9-]{36})\/(retry|cancel)$/.exec(route);
       if (action) {
@@ -168,11 +265,47 @@ function createApp({ token, dataRoot, downloadRoot, media = defaultMedia, search
           if (!['failed', 'cancelled', 'interrupted'].includes(task.status) || controllerById.has(task.id)) throw fail('当前任务不能重试，请等待停止完成', 409);
           if (task.type === 'download' && store.tasks.some(other => other.id !== task.id && other.type === 'download' && other.seriesId === task.seriesId && other.vid === task.vid && other.quality === task.quality && ['queued', 'running', 'completed'].includes(other.status))) throw fail('同集同画质已有有效任务，请使用现有任务', 409);
           store.update(task, { status: 'queued', progress: 0, error: '' });
+          stopped = false;
         } else {
           if (!['queued', 'running'].includes(task.status)) throw fail('当前任务不能取消', 409);
           store.update(task, { status: 'cancelled', error: '已取消；已完成文件保留' }); controllerById.get(task.id)?.abort();
         }
-        send(200, { success: true, task: store.publicTask(task) }); if (autoStart) drain(); return;
+        send(200, { success: true, task: store.publicTask(task) }); drain(); return;
+      }
+      if (route === '/api/queue/pause') {
+        stopped = true;
+        clearTimeout(downloadTimer);
+        for (const controller of controllerById.values()) controller.abort();
+        let count = 0;
+        for (const t of store.tasks) {
+          if (['queued', 'running'].includes(t.status)) {
+            t.status = 'stopped';
+            count++;
+          }
+        }
+        store.save();
+        return send(200, { success: true, count });
+      }
+      if (route === '/api/queue/resume') {
+        stopped = false;
+        let count = 0;
+        for (const t of store.tasks) {
+          if (['stopped', 'failed', 'interrupted', 'cancelled'].includes(t.status)) {
+            t.status = 'queued';
+            t.error = '';
+            count++;
+          }
+        }
+        store.save();
+        setImmediate(drain);
+        return send(200, { success: true, count });
+      }
+      if (route === '/api/tasks/delete' || route === '/api/delete-tasks') {
+        const payload = await body(request);
+        const ids = new Set(payload.taskIds || (payload.taskId ? [payload.taskId] : []));
+        store.tasks = store.tasks.filter(t => !ids.has(t.id));
+        store.save();
+        return send(200, { success: true, count: ids.size });
       }
       throw fail('接口不存在', 404);
     } catch (error) {
@@ -203,7 +336,14 @@ function createApp({ token, dataRoot, downloadRoot, media = defaultMedia, search
 }
 if (require.main === module) {
   try {
-    const app = createApp({ token: process.env.HONGGUO_TOKEN, dataRoot: process.env.DATA_DIR || '/data', downloadRoot: process.env.DOWNLOAD_DIR || '/downloads' });
+    const defaultDataDir = path.join(__dirname, '../server_data');
+    const defaultDownloadDir = path.join(__dirname, '../downloads');
+    if (!fs.existsSync(defaultDataDir)) fs.mkdirSync(defaultDataDir, { recursive: true });
+    if (!fs.existsSync(defaultDownloadDir)) fs.mkdirSync(defaultDownloadDir, { recursive: true });
+    const token = process.env.HONGGUO_TOKEN || '1234567890abcdef1234567890abcdef';
+    const dataRoot = process.env.DATA_DIR || defaultDataDir;
+    const downloadRoot = process.env.DOWNLOAD_DIR || defaultDownloadDir;
+    const app = createApp({ token, dataRoot, downloadRoot, autoStart: false });
     const port = Number(process.env.PORT || 3000);
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw fail('端口无效');
     app.server.listen(port, process.env.HOST || '0.0.0.0', () => console.log(`Hongguo Web listening on port ${port}`));

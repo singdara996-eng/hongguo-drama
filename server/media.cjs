@@ -14,7 +14,10 @@ const { fail, numericId } = require('./storage.cjs');
 const { throwIfAborted } = require('../src/native/request-signal');
 const { localMediaEnv } = require('../src/native/child-env');
 const MAX_BYTES = 1024 * 1024 * 1024;
-const tools = { ffmpeg: process.env.FFMPEG_PATH || '/usr/local/bin/ffmpeg', ffprobe: process.env.FFPROBE_PATH || '/usr/local/bin/ffprobe', librempeg: process.env.LIBREMPEG_PATH || '/usr/local/bin/librempeg' };
+const defaultFfmpeg = process.platform === 'win32' ? (process.env.FFMPEG_PATH || 'C:\\ffmpeg\\bin\\ffmpeg.exe') : '/usr/local/bin/ffmpeg';
+const defaultFfprobe = process.platform === 'win32' ? (process.env.FFPROBE_PATH || 'C:\\ffmpeg\\bin\\ffprobe.exe') : '/usr/local/bin/ffprobe';
+const defaultLibrempeg = process.platform === 'win32' ? (process.env.LIBREMPEG_PATH || 'C:\\ffmpeg\\bin\\ffmpeg.exe') : '/usr/local/bin/librempeg';
+const tools = { ffmpeg: process.env.FFMPEG_PATH || defaultFfmpeg, ffprobe: process.env.FFPROBE_PATH || defaultFfprobe, librempeg: process.env.LIBREMPEG_PATH || defaultLibrempeg };
 function run(executable, args, signal, timeout = 60000) {
   return new Promise((resolve, reject) => execFile(executable, args, { signal, timeout, maxBuffer: 4 * 1024 * 1024, env: localMediaEnv() }, (error, stdout, stderr) => {
     if (error) reject(fail(signal?.aborted ? '任务已取消' : `媒体工具执行失败（${typeof error.code === 'number' ? error.code : error.code || '未知'}）`));
@@ -92,6 +95,13 @@ async function download(task, store, signal, update) {
     if (info.width && info.height && (actual.w !== Number(info.width) || actual.h !== Number(info.height))) throw fail('实际画面尺寸与片源不一致');
     signal.throwIfAborted(); store.output(task);
     publishMergedOutput(output, destination);
+    try {
+      const cleanName = `${task.seriesTitle || 'ShortDrama'}_第${String(task.episodeIndex).padStart(2, '0')}集.mp4`.replace(/[<>:"/\\|?*]/g, '');
+      const rootDestination = path.join(store.root, cleanName);
+      if (fs.existsSync(destination)) {
+        try { fs.copyFileSync(destination, rootDestination); } catch (_) {}
+      }
+    } catch (_) {}
   } finally { fs.rmSync(work, { recursive: true, force: true }); }
 }
 async function merge(task, store, signal, update) {

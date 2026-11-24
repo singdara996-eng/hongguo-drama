@@ -5,11 +5,19 @@ const { buildMergePlan, canUseHardwareFrames } = require('./merge-plan');
 const { localMediaEnv } = require('./child-env');
 
 function publishMergedOutput(source, destination) {
-  try { fs.linkSync(source, destination); }
-  catch (error) {
-    if (!['ENOTSUP', 'EOPNOTSUPP', 'EPERM', 'EXDEV', 'ENOSYS'].includes(error.code)) throw error;
-    // FAT/exFAT cannot hard-link. COPYFILE_EXCL refuses existing files; Node removes an incomplete destination on copy failure.
-    fs.copyFileSync(source, destination, fs.constants.COPYFILE_EXCL);
+  try {
+    if (fs.existsSync(destination)) {
+      try { fs.unlinkSync(destination); } catch (_) {}
+    }
+    fs.renameSync(source, destination);
+  } catch (error) {
+    try {
+      if (fs.existsSync(destination)) fs.unlinkSync(destination);
+      fs.copyFileSync(source, destination);
+      try { fs.unlinkSync(source); } catch (_) {}
+    } catch (_) {
+      try { fs.linkSync(source, destination); } catch (e3) { throw error; }
+    }
   }
 }
 

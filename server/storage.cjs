@@ -41,7 +41,7 @@ class Storage {
         if (task.type === 'download' && (!SERIES.test(task.vid) || !Number.isInteger(task.episodeIndex) || task.episodeIndex < 1 || !['auto', '720p', '1080p'].includes(task.quality))) throw fail('下载记录损坏');
         if (task.type === 'merge' && (!Array.isArray(task.taskIds) || task.taskIds.some(id => !ID.test(id)))) throw fail('合并记录损坏');
         seen.add(task.id);
-        if (task.status === 'running') { task.status = 'interrupted'; task.error = '服务已重启，请手动重试'; }
+        if (task.status === 'running' || task.status === 'queued') { task.status = 'interrupted'; task.error = '服务已重启，请手动重试'; }
         this.tasks.push(task);
       }
     }
@@ -52,7 +52,8 @@ class Storage {
   checkRoot() {
     try {
       const stat = fs.lstatSync(this.root);
-      if (!stat.isDirectory() || stat.isSymbolicLink() || stat.dev !== this.rootStat.dev || stat.ino !== this.rootStat.ino || fs.realpathSync(this.root) !== this.root) throw mountChanged('下载挂载已变化，请恢复原挂载后重启服务');
+      if (!stat.isDirectory() || stat.isSymbolicLink()) throw mountChanged('下载挂载已变化，请恢复原挂载后重启服务');
+      if (process.platform !== 'win32' && (stat.dev !== this.rootStat.dev || stat.ino !== this.rootStat.ino || fs.realpathSync(this.root) !== this.root)) throw mountChanged('下载挂载已变化，请恢复原挂载后重启服务');
     } catch (error) {
       if (error.code === 'MOUNT_CHANGED') throw error;
       throw mountChanged('下载挂载已变化，请恢复原挂载后重启服务');
@@ -164,17 +165,23 @@ class Storage {
     let stat;
     try {
       stat = fs.lstatSync(this.dataRoot);
-      if (!stat.isDirectory() || stat.isSymbolicLink() || stat.dev !== this.dataStat.dev || stat.ino !== this.dataStat.ino || fs.realpathSync(this.dataRoot) !== this.dataRoot) throw mountChanged('任务目录挂载已变化，请恢复原挂载后重启服务');
+      if (!stat.isDirectory() || stat.isSymbolicLink()) throw mountChanged('任务目录挂载已变化，请恢复原挂载后重启服务');
+      if (process.platform !== 'win32' && (stat.dev !== this.dataStat.dev || stat.ino !== this.dataStat.ino || fs.realpathSync(this.dataRoot) !== this.dataRoot)) throw mountChanged('任务目录挂载已变化，请恢复原挂载后重启服务');
     } catch (error) {
       if (error.code === 'MOUNT_CHANGED') throw error;
       throw mountChanged('任务目录挂载已变化，请恢复原挂载后重启服务');
     }
     const temporary = `${this.stateFile}.${crypto.randomUUID()}.tmp`;
     const fd = fs.openSync(temporary, 'wx', 0o600);
-    try { fs.writeFileSync(fd, JSON.stringify({ version: 1, tasks: this.tasks })); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+    try {
+      fs.writeFileSync(fd, JSON.stringify({ version: 1, tasks: this.tasks }));
+      try { fs.fsyncSync(fd); } catch {}
+    } finally { fs.closeSync(fd); }
     fs.renameSync(temporary, this.stateFile);
-    const dir = fs.openSync(this.dataRoot, 'r');
-    try { fs.fsyncSync(dir); } finally { fs.closeSync(dir); }
+    try {
+      const dir = fs.openSync(this.dataRoot, 'r');
+      try { fs.fsyncSync(dir); } catch {} finally { fs.closeSync(dir); }
+    } catch {}
   }
   add(tasks) { if (this.tasks.length + tasks.length > 10000) throw fail('任务已达上限，请备份后维护任务库', 409); this.tasks.push(...tasks); try { this.save(); } catch (error) { this.tasks.splice(-tasks.length); throw error; } }
   update(task, changes) { const old = { ...task }; Object.assign(task, changes, { updatedAt: new Date().toISOString() }); try { this.save(); } catch (error) { Object.assign(task, old); throw error; } }

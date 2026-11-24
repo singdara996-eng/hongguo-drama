@@ -5,11 +5,369 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' data: https: http:; media-src 'self' blob: hongguo-stream: hongguo-local:; style-src 'self' 'unsafe-inline'; script-src 'self' blob: 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' hongguo-stream: hongguo-local:"
-    />
-    <title>红果短剧</title>
+    <title>Hongguo Short Drama</title>
+    <script>
+      // Web Browser Bridge for Google Chrome
+      (function() {
+        if (window.electronAPI) return;
+        const noop = () => {};
+        const listen = () => () => {};
+        const pResolve = (val) => Promise.resolve(val);
+
+        const categories = [
+          { slug: 'real-drama', label: '真人剧' },
+          { slug: 'comic-drama', label: '漫剧' },
+          { slug: 'ai-drama', label: 'AI剧' },
+          { slug: 'comic', label: '漫画' },
+          { slug: 'hot-drama', label: '综合热播榜', group: 'rank' },
+          { slug: 'hot-real-drama', label: '真人热播榜', group: 'rank' },
+          { slug: 'hot-comic-drama', label: '漫剧热播榜', group: 'rank' },
+          { slug: 'hot-ai-drama', label: 'AI 热播榜', group: 'rank' }
+        ];
+
+        const defaultGenres = [
+          { slug: '', label: '全部' },
+          { slug: '5478', label: '都市' },
+          { slug: '5465', label: '逆袭' },
+          { slug: '5475', label: '古装' },
+          { slug: '5502', label: '重生' },
+          { slug: '5464', label: '年代' },
+          { slug: '5536', label: '奇幻' }
+        ];
+
+        const apiBase = window.location.port === '3000' ? '' : 'http://localhost:3000';
+
+        const progressListeners = new Set();
+        const completedListeners = new Set();
+        const failedListeners = new Set();
+        const queueChangedListeners = new Set();
+        const taskAddedListeners = new Set();
+
+        let lastTaskState = new Map();
+
+        // Real-time task progress poller
+        setInterval(async () => {
+          try {
+            const res = await fetch(`${apiBase}/api/tasks`);
+            const data = await res.json();
+            const tasks = data.tasks || [];
+            let queueChanged = false;
+
+            for (const task of tasks) {
+              const prev = lastTaskState.get(task.id);
+              if (!prev) {
+                queueChanged = true;
+                taskAddedListeners.forEach(cb => { try { cb(task); } catch(_) {} });
+              } else {
+                if (task.status === 'running' || task.progress !== prev.progress) {
+                  progressListeners.forEach(cb => {
+                    try {
+                      cb({
+                        id: task.id,
+                        progress: task.progress || 0,
+                        receivedBytes: 0,
+                        totalBytes: 0
+                      });
+                    } catch(_) {}
+                  });
+                }
+                if (task.status === 'completed' && prev.status !== 'completed') {
+                  queueChanged = true;
+                  completedListeners.forEach(cb => { try { cb(task); } catch(_) {} });
+                }
+                if (task.status === 'failed' && prev.status !== 'failed') {
+                  queueChanged = true;
+                  failedListeners.forEach(cb => { try { cb(task); } catch(_) {} });
+                }
+              }
+              lastTaskState.set(task.id, { ...task });
+            }
+
+            if (queueChanged) {
+              queueChangedListeners.forEach(cb => { try { cb(); } catch(_) {} });
+            }
+          } catch (_) {}
+        }, 600);
+
+        window.electronAPI = new Proxy({
+          platform: 'browser',
+          getAppInfo: () => pResolve({
+            version: '8.2.0',
+            appName: 'Hongguo Short Drama',
+            brand: 'Hongguo Drama',
+            systemLocale: 'km',
+            locale: 'km'
+          }),
+          getWindowLayout: () => pResolve({ width: window.innerWidth, height: window.innerHeight, layout: 'landscape' }),
+          setWindowLayout: (mode) => pResolve({ success: true, mode }),
+          getAlwaysOnTop: () => pResolve(false),
+          setAlwaysOnTop: () => pResolve(false),
+          setStealthMode: () => pResolve({ success: true }),
+          getMediaSources: () => pResolve({ success: true, sources: [
+            { id: 'hongguo', label: '红果短剧', enabled: true },
+            { id: 'xifan', label: '西番短剧', enabled: true },
+            { id: 'hema', label: '河马短剧', enabled: true }
+          ] }),
+          getCustomSources: () => pResolve([]),
+          getSettings: () => pResolve({
+            root: 'C:\\Users\\SH\\Downloads',
+            downloadPath: 'C:\\Users\\SH\\Downloads',
+            name_format: '剧名 集数',
+            max_concurrent: 3,
+            ui_zoom: 1,
+            download_quality: 'auto',
+            download_metadata: false,
+            custom_sources: [],
+            builtin_sources: { hongguo: true, xifan: true, hema: true, reelshort: false, dramabox: false },
+            auto_delete_watched: false,
+            compat_mode: true,
+            fast_conversion: false,
+            cache_next_episode: true,
+            picture_in_picture_mode: 'custom',
+            app_updates_enabled: false,
+            watch_updates_enabled: true,
+            watch_sequels_enabled: true,
+            watch_notifications_enabled: false,
+            search_app_enabled: false,
+            language: 'km'
+          }),
+          saveSettings: () => pResolve({ success: true }),
+          getSeriesList: () => pResolve([]),
+          getSeriesProgress: () => pResolve({ success: true, progress: {} }),
+          warmSeriesProgress: () => pResolve({ success: true, progress: 0 }),
+          getWatchHistory: () => pResolve([]),
+          refreshWatchHistory: () => pResolve([]),
+          getDownloadTasks: async () => {
+            try {
+              const res = await fetch(`${apiBase}/api/tasks`);
+              const data = await res.json();
+              return (data.tasks || []).map(task => ({
+                ...task,
+                status: task.status === 'running' ? 'downloading' : task.status === 'queued' ? 'pending' : task.status,
+                title: `${task.seriesTitle || '短剧'} 第${task.episodeIndex || 1}集`,
+                filename: `${task.seriesTitle || '短剧'}_第${String(task.episodeIndex || 1).padStart(2, '0')}集.mp4`,
+                progress: task.progress || 0,
+                videoInfo: {
+                  cover: task.cover ? (task.cover.startsWith('http') && !task.cover.includes('proxy-image') ? (`${apiBase}/api/proxy-image?url=` + encodeURIComponent(task.cover)) : (task.cover.startsWith('/api') ? `${apiBase}${task.cover}` : task.cover)) : ''
+                }
+              }));
+            } catch {
+              return [];
+            }
+          },
+          getMergeTasks: () => pResolve([]),
+          getQueueStatus: async () => {
+            try {
+              const res = await fetch(`${apiBase}/api/tasks`);
+              const data = await res.json();
+              const tasks = data.tasks || [];
+              return {
+                running: tasks.filter(t => t.status === 'running').length,
+                queued: tasks.filter(t => t.status === 'queued').length
+              };
+            } catch {
+              return { running: 0, queued: 0 };
+            }
+          },
+          onDownloadProgress: (cb) => { progressListeners.add(cb); return () => progressListeners.delete(cb); },
+          onDownloadCompleted: (cb) => { completedListeners.add(cb); return () => completedListeners.delete(cb); },
+          onDownloadFailed: (cb) => { failedListeners.add(cb); return () => failedListeners.delete(cb); },
+          onDownloadStopped: () => () => {},
+          onDownloadQueueChanged: (cb) => { queueChangedListeners.add(cb); return () => queueChangedListeners.delete(cb); },
+          onDownloadTaskAdded: (cb) => { taskAddedListeners.add(cb); return () => taskAddedListeners.delete(cb); },
+          browseCategories: () => pResolve(categories),
+          browseList: async (options) => {
+            const cat = options?.category || 'real-drama';
+            const gen = options?.genre || '';
+            const pg = options?.page || 1;
+            const channel = options?.catalogChannel || 'web';
+            try {
+              const res = await fetch(`${apiBase}/api/browse-list?category=${encodeURIComponent(cat)}&genre=${encodeURIComponent(gen)}&page=${pg}&catalogChannel=${channel}`);
+              const data = await res.json();
+              return {
+                success: true,
+                results: (data.results || []).map(item => ({
+                  ...item,
+                  cover: item.cover ? (item.cover.startsWith('http') && !item.cover.includes('proxy-image') ? (`${apiBase}/api/proxy-image?url=` + encodeURIComponent(item.cover)) : (item.cover.startsWith('/api') ? `${apiBase}${item.cover}` : item.cover)) : ''
+                })),
+                total: data.total || (data.results || []).length,
+                totalPages: data.totalPages || 1,
+                genres: data.genres?.length ? data.genres : defaultGenres,
+                page: data.page || pg,
+                hasMore: Boolean(data.hasMore)
+              };
+            } catch (err) {
+              console.error('browseList error:', err);
+              return { success: true, results: [], total: 0, totalPages: 0, genres: defaultGenres };
+            }
+          },
+          searchSeries: async (query, options) => {
+            const pg = (typeof options === 'object' ? options?.page : options) || 1;
+            try {
+              const res = await fetch(`${apiBase}/api/search?q=${encodeURIComponent(query)}&page=${pg}`);
+              const data = await res.json();
+              const results = (data.results || []).map(item => ({
+                ...item,
+                cover: item.cover ? (item.cover.startsWith('http') && !item.cover.includes('proxy-image') ? (`${apiBase}/api/proxy-image?url=` + encodeURIComponent(item.cover)) : (item.cover.startsWith('/api') ? `${apiBase}${item.cover}` : item.cover)) : ''
+              }));
+              return { success: true, results, page: data.page || pg, hasMore: Boolean(data.hasMore) };
+            } catch {
+              return { success: true, results: [], page: 1, hasMore: false };
+            }
+          },
+          searchSeriesMore: async (query, options) => {
+            const pg = (typeof options === 'object' ? options?.page : options) || 2;
+            try {
+              const res = await fetch(`${apiBase}/api/search?q=${encodeURIComponent(query)}&page=${pg}`);
+              const data = await res.json();
+              const results = (data.results || []).map(item => ({
+                ...item,
+                cover: item.cover ? (item.cover.startsWith('http') && !item.cover.includes('proxy-image') ? (`${apiBase}/api/proxy-image?url=` + encodeURIComponent(item.cover)) : (item.cover.startsWith('/api') ? `${apiBase}${item.cover}` : item.cover)) : ''
+              }));
+              return { success: true, results, page: data.page || pg, hasMore: Boolean(data.hasMore) };
+            } catch {
+              return { success: false, results: [], page: pg, hasMore: false };
+            }
+          },
+          searchResolve: async (seriesId) => {
+            try {
+              const res = await fetch(`${apiBase}/api/series/` + encodeURIComponent(seriesId));
+              const data = await res.json();
+              return { success: true, data: data.series || {} };
+            } catch (err) {
+              return { success: false, error: String(err) };
+            }
+          },
+          getSeriesEpisodes: async (id) => {
+            try {
+              const res = await fetch(`${apiBase}/api/series/` + encodeURIComponent(id));
+              const data = await res.json();
+              return { success: true, data: data.series || { episodes: [] } };
+            } catch (err) {
+              return { success: false, error: String(err) };
+            }
+          },
+          getPublicDetails: async (id) => {
+            try {
+              const res = await fetch(`${apiBase}/api/series/` + encodeURIComponent(id));
+              const data = await res.json();
+              return { success: true, data: data.series || {} };
+            } catch (err) {
+              return { success: false, error: String(err) };
+            }
+          },
+          playSeries: (payload) => {
+            console.log('Play series:', payload);
+            return pResolve({ success: true });
+          },
+          hongguoDownloadBatch: async (payload) => {
+            try {
+              const body = {
+                seriesId: String(payload.seriesId),
+                episodeIds: (payload.episodeIds || (payload.episodes || []).map(e => String(e.vid))),
+                quality: payload.quality || 'auto'
+              };
+              const res = await fetch(`${apiBase}/api/downloads`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+              });
+              const data = await res.json();
+              return {
+                success: data.success,
+                count: body.episodeIds.length,
+                tasks: data.tasks,
+                error: data.error
+              };
+            } catch (err) {
+              return { success: false, error: String(err) };
+            }
+          },
+          pauseAll: async () => {
+            try {
+              const res = await fetch(`${apiBase}/api/queue/pause`, { method: 'POST' });
+              return await res.json();
+            } catch (err) {
+              return { success: false, error: String(err) };
+            }
+          },
+          resumeAll: async () => {
+            try {
+              const res = await fetch(`${apiBase}/api/queue/resume`, { method: 'POST' });
+              return await res.json();
+            } catch (err) {
+              return { success: false, error: String(err) };
+            }
+          },
+          deleteTasksWithFiles: async (ids) => {
+            try {
+              const res = await fetch(`${apiBase}/api/tasks/delete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ taskIds: ids })
+              });
+              return await res.json();
+            } catch (err) {
+              return { success: false, error: String(err) };
+            }
+          },
+          deleteTasks: async (ids) => {
+            try {
+              const res = await fetch(`${apiBase}/api/tasks/delete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ taskIds: ids })
+              });
+              return await res.json();
+            } catch (err) {
+              return { success: false, error: String(err) };
+            }
+          },
+          deleteTask: async (id) => {
+            try {
+              const res = await fetch(`${apiBase}/api/tasks/delete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ taskId: id })
+              });
+              return await res.json();
+            } catch (err) {
+              return { success: false, error: String(err) };
+            }
+          },
+          stopDownload: async (id) => {
+            try {
+              const res = await fetch(`${apiBase}/api/tasks/${id}/cancel`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+              });
+              return await res.json();
+            } catch (err) {
+              return { success: false, error: String(err) };
+            }
+          },
+          retryTask: async (id) => {
+            try {
+              const res = await fetch(`${apiBase}/api/tasks/${id}/retry`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+              });
+              return await res.json();
+            } catch (err) {
+              return { success: false, error: String(err) };
+            }
+          }
+        }, {
+          get(target, prop) {
+            if (prop in target) return target[prop];
+            if (typeof prop === 'string' && prop.startsWith('on')) return listen;
+            return () => pResolve({});
+          }
+        });
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
