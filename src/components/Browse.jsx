@@ -799,7 +799,7 @@ function Browse({ onNavigate, active = true }) {
                         aria-pressed={(!mobile || selectingDownloads) && selectedIdx.has(ep.vid_index)}
                         key={ep.vid_index}
                         className={`ep-chip ep-${ep.status} ${(!mobile || selectingDownloads) && selectedIdx.has(ep.vid_index) ? 'ep-picked' : ''}`}
-                        onClick={() => mobile && !selectingDownloads ? playNow(ep.vid_index) : toggleIdx(ep.vid_index)}
+                        onClick={() => !selectingDownloads ? playNow(ep.vid_index) : toggleIdx(ep.vid_index)}
                         title={(ep.locked ? t('需在来源平台解锁') : ep.title || t(`第 ${ep.vid_index} 集`))}
                       >
                         <span className="ep-num">{t(ep.vid_index)}</span>{ep.locked && <span className="ep-lock-label">{t("锁定")}</span>}

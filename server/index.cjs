@@ -225,6 +225,39 @@ function createApp({ token, dataRoot, downloadRoot, media = defaultMedia, search
           return send(200, { success: true, series: await media.series(numericId(route.split('/').pop())) });
         } finally { reading--; }
       }
+      const streamRoute = /^\/api\/stream\/([a-zA-Z0-9_-]+)\/([a-zA-Z0-9_-]+)$/.exec(route);
+      if (streamRoute && request.method === 'GET') {
+        const sid = streamRoute[1];
+        const vid = streamRoute[2];
+        try {
+          const hongguo = require('../src/native/hongguo.js');
+          const play = await hongguo.fetchPlayUrlSingle(vid, sid);
+          if (!play?.url) throw fail('无法获取视频播放地址', 404);
+          const headers = {
+            'User-Agent': play.userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept-Encoding': 'identity'
+          };
+          if (request.headers.range) {
+            headers['Range'] = request.headers.range;
+          }
+          const axios = require('axios');
+          const upstream = await axios.get(play.url, {
+            headers,
+            responseType: 'stream',
+            validateStatus: status => status >= 200 && status < 400
+          });
+          response.statusCode = upstream.status;
+          for (const [k, v] of Object.entries(upstream.headers)) {
+            if (['content-type', 'content-range', 'content-length', 'accept-ranges'].includes(k.toLowerCase())) {
+              response.setHeader(k, v);
+            }
+          }
+          response.setHeader('Access-Control-Allow-Origin', '*');
+          return upstream.data.pipe(response);
+        } catch (e) {
+          return send(500, { success: false, error: String(e) });
+        }
+      }
       const fileRoute = /^\/api\/files\/([a-f0-9-]{36})$/.exec(route);
       if (fileRoute && request.method === 'GET') {
         const task = store.get(fileRoute[1]); if (task.status !== 'completed') throw fail('文件尚未完成', 409);

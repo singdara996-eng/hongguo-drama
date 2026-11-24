@@ -64,6 +64,130 @@
 
         let lastTaskState = new Map();
 
+        let currentEpisodes = [];
+        let currentSeriesTitle = '';
+        let currentSeriesId = '';
+        let currentVidIndex = 1;
+
+        window.openWebPlayer = async function(seriesId, vidIndex = 1) {
+          let modal = document.getElementById('web-player-modal');
+          if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'web-player-modal';
+            modal.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.88); z-index:9999999; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:16px; box-sizing:border-box; backdrop-filter:blur(10px); font-family:system-ui,-apple-system,sans-serif;';
+            modal.innerHTML = `
+              <div style="width:100%; max-width:880px; display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; color:#fff;">
+                <div id="web-player-title" style="font-size:16px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; padding-right:12px;">កំពុងផ្ទុកវីដេអូ...</div>
+                <button id="web-player-close" style="background:#27272a; border:1px solid #3f3f46; color:#fff; font-size:18px; width:36px; height:36px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s;">✕</button>
+              </div>
+              <div style="position:relative; width:100%; max-width:880px; background:#000; border-radius:12px; overflow:hidden; box-shadow:0 12px 48px rgba(0,0,0,0.9); display:flex; justify-content:center; align-items:center; aspect-ratio:16/9; max-height:70vh;">
+                <video id="web-player-video" controls autoplay playsinline style="width:100%; height:100%; object-fit:contain; background:#000; outline:none;"></video>
+                <div id="web-player-loading" style="position:absolute; color:#fff; font-size:15px; background:rgba(0,0,0,0.75); padding:10px 20px; border-radius:8px; display:none; pointer-events:none;">កំពុងទាញយកវីដេអូ...</div>
+              </div>
+              <div style="width:100%; max-width:880px; display:flex; justify-content:space-between; align-items:center; margin-top:14px; gap:10px; flex-wrap:wrap;">
+                <button id="web-player-prev" style="background:#27272a; border:1px solid #3f3f46; color:#fff; padding:8px 16px; border-radius:6px; cursor:pointer; font-size:13.5px;">‹ ភាគមុន (Prev)</button>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <label style="color:#a1a1aa; font-size:13px;">ជ្រើសភាគ:</label>
+                  <select id="web-player-select" style="background:#18181b; border:1px solid #3f3f46; color:#fff; padding:6px 12px; border-radius:6px; font-size:13.5px; outline:none; cursor:pointer; max-width:220px;"></select>
+                </div>
+                <button id="web-player-next" style="background:#c8383d; border:none; color:#fff; padding:8px 16px; border-radius:6px; cursor:pointer; font-size:13.5px; font-weight:600;">ភាគបន្ទាប់ (Next) ›</button>
+              </div>
+            `;
+            document.body.appendChild(modal);
+
+            document.getElementById('web-player-close').onclick = () => {
+              const vid = document.getElementById('web-player-video');
+              if (vid) { vid.pause(); vid.src = ''; }
+              modal.style.display = 'none';
+            };
+
+            document.getElementById('web-player-prev').onclick = () => {
+              if (currentVidIndex > 1) window.playEpisodeByIndex(currentVidIndex - 1);
+            };
+
+            document.getElementById('web-player-next').onclick = () => {
+              if (currentVidIndex < currentEpisodes.length) window.playEpisodeByIndex(currentVidIndex + 1);
+            };
+
+            document.getElementById('web-player-select').onchange = (e) => {
+              window.playEpisodeByIndex(parseInt(e.target.value, 10));
+            };
+
+            const videoEl = document.getElementById('web-player-video');
+            videoEl.onended = () => {
+              if (currentVidIndex < currentEpisodes.length) {
+                window.playEpisodeByIndex(currentVidIndex + 1);
+              }
+            };
+
+            document.addEventListener('keydown', (e) => {
+              if (e.key === 'Escape' && modal.style.display !== 'none') {
+                const vid = document.getElementById('web-player-video');
+                if (vid) { vid.pause(); vid.src = ''; }
+                modal.style.display = 'none';
+              }
+            });
+          }
+
+          modal.style.display = 'flex';
+          const loadingEl = document.getElementById('web-player-loading');
+          loadingEl.style.display = 'block';
+          loadingEl.textContent = 'កំពុងទាញយកព័ត៌មានរឿង...';
+
+          try {
+            const res = await fetch(`${apiBase}/api/series/${encodeURIComponent(seriesId)}`);
+            const data = await res.json();
+            const series = data.series || {};
+            currentSeriesId = String(seriesId);
+            currentSeriesTitle = series.series_title || 'ទស្សនារឿង';
+            currentEpisodes = Array.isArray(series.episodes) ? series.episodes : [];
+
+            const select = document.getElementById('web-player-select');
+            select.innerHTML = '';
+            currentEpisodes.forEach(ep => {
+              const opt = document.createElement('option');
+              opt.value = ep.vid_index;
+              opt.textContent = `ភាគ ${ep.vid_index}${ep.title ? ' - ' + ep.title : ''}`;
+              select.appendChild(opt);
+            });
+
+            window.playEpisodeByIndex(vidIndex);
+          } catch (err) {
+            loadingEl.textContent = 'បរាជ័យក្នុងការទាញយកភាគ: ' + err.message;
+          }
+        };
+
+        window.playEpisodeByIndex = function(index) {
+          currentVidIndex = index;
+          const ep = currentEpisodes.find(e => e.vid_index === index) || currentEpisodes[index - 1];
+          if (!ep) return;
+
+          const titleEl = document.getElementById('web-player-title');
+          titleEl.textContent = `《${currentSeriesTitle}》 - ភាគទី ${index}`;
+
+          const select = document.getElementById('web-player-select');
+          if (select) select.value = String(index);
+
+          const prevBtn = document.getElementById('web-player-prev');
+          if (prevBtn) prevBtn.disabled = (index <= 1);
+
+          const nextBtn = document.getElementById('web-player-next');
+          if (nextBtn) nextBtn.disabled = (index >= currentEpisodes.length);
+
+          const videoEl = document.getElementById('web-player-video');
+          const loadingEl = document.getElementById('web-player-loading');
+          loadingEl.style.display = 'block';
+          loadingEl.textContent = `កំពុងភ្ជាប់ភាគ ${index}...`;
+
+          videoEl.src = `${apiBase}/api/stream/${encodeURIComponent(currentSeriesId)}/${encodeURIComponent(ep.vid)}`;
+          videoEl.load();
+          videoEl.play().then(() => {
+            loadingEl.style.display = 'none';
+          }).catch(() => {
+            loadingEl.style.display = 'none';
+          });
+        };
+
         // Real-time task progress poller
         setInterval(async () => {
           try {
@@ -277,6 +401,13 @@
           },
           playSeries: (payload) => {
             console.log('Play series:', payload);
+            if (payload && payload.seriesId) {
+              try {
+                window.openWebPlayer(payload.seriesId, payload.vidIndex || 1);
+              } catch (e) {
+                console.error('Error opening player:', e);
+              }
+            }
             return pResolve({ success: true });
           },
           hongguoDownloadBatch: async (payload) => {
