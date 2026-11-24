@@ -8,11 +8,13 @@
 .browse-cat:hover { color: var(--text-primary); }
 .browse-cat.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
 .browse-nav-label { padding-top: 2px; color: var(--text-secondary); font-size: 12px; }
-.browse-genres { display: flex; flex-wrap: wrap; gap: 8px 10px; margin-bottom: 24px; padding: 6px 0; }
-.genre-chip { padding: 5px 14px; border: 1px solid transparent; border-radius: 20px; background: var(--bg-card); color: var(--text-secondary); font-size: 13px; font-weight: 400; cursor: pointer; transition: all 0.2s ease; line-height: 1.4; }
-.genre-chip:hover { background: var(--bg-inset); color: var(--text-primary); border-color: var(--border); }
-.genre-chip.active { background: #fde8e8; color: #e02424; border-color: #fca5a5; font-weight: 600; box-shadow: 0 1px 4px rgba(224, 36, 36, 0.15); }
-[data-theme='dark'] .genre-chip.active { background: rgba(224, 36, 36, 0.25); color: #fca5a5; border-color: #e02424; }
+.browse-genres { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; margin-bottom: 24px; padding: 8px 0; }
+.genre-chip { padding: 4px 6px; border: 0; border-radius: 6px; background: transparent; color: #d1d5db; font-size: 13.5px; font-weight: 400; cursor: pointer; transition: all 0.15s ease; line-height: 1.4; white-space: nowrap; }
+.genre-chip:hover { background: transparent; color: #ffffff; }
+.genre-chip.active { background: #3e2424 !important; color: #f87171 !important; font-weight: 600; padding: 4px 10px; border-radius: 6px; box-shadow: none; border: 0; }
+[data-theme='light'] .genre-chip { color: #4b5563; }
+[data-theme='light'] .genre-chip:hover { color: #111827; }
+[data-theme='light'] .genre-chip.active { background: #fee2e2 !important; color: #dc2626 !important; }
 .browse-loading { display: flex; gap: 10px; align-items: center; color: var(--text-secondary); padding: 22px 0; }
 .browse-update-error { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin: 0 0 22px; }
 .browse-update-error span { min-width: 0; overflow-wrap: anywhere; }
