@@ -53,6 +53,7 @@ function Browse({ onNavigate, active = true }) {
   const mobile = window.electronAPI.platform === 'android';
   const FilterContainer = mobile ? 'details' : 'div';
   const [selectingDownloads, setSelectingDownloads] = useState(false);
+  const [downloadQuality, setDownloadQuality] = useState('1080p');
   const [source, setSource] = useState('hongguo');
   const [catalogChannel, setCatalogChannel] = useState(() => {
     try { return localStorage.getItem(CATALOG_CHANNEL_KEY) === 'web' ? 'web' : 'app'; }
@@ -494,6 +495,7 @@ function Browse({ onNavigate, active = true }) {
         seriesId: detail.series_id,
         seriesTitle: detail.series_title,
         episodes: eps,
+        quality: downloadQuality,
       });
       if (res && res.success) {
         showToast(`已加入下载队列：${res.count} 集`);
@@ -785,6 +787,62 @@ function Browse({ onNavigate, active = true }) {
                         <button className="btn-chip" onClick={() => setSelectedIdx(new Set(detail.episodes.filter((e) => !e.locked).map((e) => e.vid_index)))}>{t("全选")}</button>
                         <button className="btn-chip" onClick={() => setSelectedIdx(new Set())}>{t("清空")}</button>
                       </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '12.5px', color: '#a1a1aa', fontWeight: 600 }}>{t("គុណភាពទាញយក:")}</span>
+                        <div style={{ display: 'inline-flex', gap: '4px', background: 'rgba(255,255,255,0.06)', padding: '2px', borderRadius: '6px' }}>
+                          <button
+                            type="button"
+                            className="btn-chip"
+                            style={{
+                              background: downloadQuality === '1080p' ? '#059669' : 'transparent',
+                              color: '#fff',
+                              border: downloadQuality === '1080p' ? '1px solid #10b981' : '1px solid transparent',
+                              padding: '3px 9px',
+                              borderRadius: '4px',
+                              fontSize: '11.5px',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                            onClick={() => setDownloadQuality('1080p')}
+                          >
+                            1080p (Full HD)
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-chip"
+                            style={{
+                              background: downloadQuality === '720p' ? '#059669' : 'transparent',
+                              color: downloadQuality === '720p' ? '#fff' : '#a1a1aa',
+                              border: downloadQuality === '720p' ? '1px solid #10b981' : '1px solid transparent',
+                              padding: '3px 9px',
+                              borderRadius: '4px',
+                              fontSize: '11.5px',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                            onClick={() => setDownloadQuality('720p')}
+                          >
+                            720p (HD)
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-chip"
+                            style={{
+                              background: downloadQuality === 'auto' ? '#059669' : 'transparent',
+                              color: downloadQuality === 'auto' ? '#fff' : '#a1a1aa',
+                              border: downloadQuality === 'auto' ? '1px solid #10b981' : '1px solid transparent',
+                              padding: '3px 9px',
+                              borderRadius: '4px',
+                              fontSize: '11.5px',
+                              fontWeight: 600,
+                              cursor: 'pointer'
+                            }}
+                            onClick={() => setDownloadQuality('auto')}
+                          >
+                            Auto
+                          </button>
+                        </div>
+                      </div>
                       </>}
                     </div>
                   </div>
@@ -822,7 +880,7 @@ function Browse({ onNavigate, active = true }) {
                       onClick={mobile && !selectingDownloads ? () => { setSelectedIdx(new Set()); setSelectingDownloads(true); } : downloadSelected}
                     >
                       <Download size={15} />
-                      {t(mobile && !selectingDownloads ? '选集下载' : `下载选中 (${selectedIdx.size})`)}
+                      {t(mobile && !selectingDownloads ? '选集下载' : `ទាញយក (${selectedIdx.size}) [${downloadQuality === '1080p' ? 'Full HD 1080p' : downloadQuality}]`)}
                     </button>
                   </div>
                 </div>

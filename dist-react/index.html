@@ -111,6 +111,10 @@
                     <button type="button" data-quality="1080p" class="web-quality-btn" style="background:transparent; color:#d4d4d8; border:none; padding:4px 7px; border-radius:4px; font-size:11.5px; font-weight:600; cursor:pointer;">1080p</button>
                   </div>
                 </div>
+                <!-- Direct Full HD Download Button -->
+                <button id="web-player-download" type="button" style="background:#059669; border:none; color:#fff; padding:6px 14px; border-radius:6px; cursor:pointer; font-size:12.5px; font-weight:600; display:flex; align-items:center; gap:5px; transition:background 0.2s;">
+                  <span>⬇️ ទាញយក Full HD</span>
+                </button>
                 <button id="web-player-next" style="background:#c8383d; border:none; color:#fff; padding:8px 16px; border-radius:6px; cursor:pointer; font-size:13.5px; font-weight:600;">ភាគបន្ទាប់ (Next) ›</button>
               </div>
             `;
@@ -169,6 +173,43 @@
             });
             updateActiveQualityBtn(currentQuality);
 
+            const dlBtn = document.getElementById('web-player-download');
+            if (dlBtn) {
+              dlBtn.onclick = async () => {
+                const ep = currentEpisodes.find(e => e.vid_index === currentVidIndex) || currentEpisodes[currentVidIndex - 1];
+                if (!ep || !currentSeriesId) {
+                  alert('មិនមានទិន្នន័យភាគនេះទេ');
+                  return;
+                }
+                dlBtn.disabled = true;
+                const oldContent = dlBtn.innerHTML;
+                dlBtn.innerHTML = '<span>⏳ កំពុងបញ្ជូន...</span>';
+                try {
+                  const res = await window.electronAPI.hongguoDownloadBatch({
+                    seriesId: currentSeriesId,
+                    seriesTitle: currentSeriesTitle,
+                    episodes: [ep],
+                    quality: '1080p'
+                  });
+                  if (res && res.success) {
+                    dlBtn.innerHTML = '<span>✅ បានដាក់ទាញយក Full HD!</span>';
+                    setTimeout(() => {
+                      dlBtn.innerHTML = oldContent;
+                      dlBtn.disabled = false;
+                    }, 2500);
+                  } else {
+                    alert('បរាជ័យក្នុងការទាញយក: ' + ((res && res.error) || 'unknown error'));
+                    dlBtn.innerHTML = oldContent;
+                    dlBtn.disabled = false;
+                  }
+                } catch (err) {
+                  alert('កំហុស: ' + err.message);
+                  dlBtn.innerHTML = oldContent;
+                  dlBtn.disabled = false;
+                }
+              };
+            }
+
             document.getElementById('web-player-close').onclick = () => {
               const vid = document.getElementById('web-player-video');
               if (vid) { vid.pause(); vid.removeAttribute('src'); vid.load(); }
@@ -188,6 +229,10 @@
             };
 
             const videoEl = document.getElementById('web-player-video');
+            videoEl.onclick = () => {
+              if (videoEl.paused) videoEl.play().catch(() => {});
+              else videoEl.pause();
+            };
             videoEl.onended = () => {
               if (currentVidIndex < currentEpisodes.length) {
                 window.playEpisodeByIndex(currentVidIndex + 1);
@@ -382,7 +427,7 @@
             name_format: '剧名 集数',
             max_concurrent: 3,
             ui_zoom: 1,
-            download_quality: 'auto',
+            download_quality: '1080p',
             download_metadata: false,
             custom_sources: [],
             builtin_sources: { hongguo: true, xifan: true, hema: true, reelshort: false, dramabox: false },
@@ -539,7 +584,7 @@
               const body = {
                 seriesId: String(payload.seriesId),
                 episodeIds: (payload.episodeIds || (payload.episodes || []).map(e => String(e.vid))),
-                quality: payload.quality || 'auto'
+                quality: payload.quality || '1080p'
               };
               const res = await fetch(`${apiBase}/api/downloads`, {
                 method: 'POST',
@@ -669,7 +714,7 @@
         });
       })();
     </script>
-    <script type="module" crossorigin src="./assets/index-BL6-o963.js"></script>
+    <script type="module" crossorigin src="./assets/index-2aZPMfy4.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-BK7o7fDJ.css">
   </head>
   <body>
