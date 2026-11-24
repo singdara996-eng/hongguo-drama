@@ -66,12 +66,37 @@ function parseCatalog(html, category, page, sourceUrl) {
     ...publicMetadata(item),
     url: `${SITE}/detail?series_id=${item.series_id}`,
   }));
-  const genres = (Array.isArray(data.selectorList) ? data.selectorList : []).flatMap(row => Array.isArray(row?.items) ? row.items : [])
-    .filter(item => /^[a-z0-9-]+$/.test(item?.selector_item_id) && typeof item.show_name === 'string')
-    .map(item => ({ slug: item.selector_item_id, label: item.show_name }));
+  const ORDERED_GENRES = [
+    { slug: 'action', label: 'Action' },
+    { slug: 'adventure', label: 'Adventure' },
+    { slug: 'magic', label: 'Magic' },
+    { slug: 'romance', label: 'Romance' },
+    { slug: 'family', label: 'Family' },
+    { slug: 'clan', label: 'Family saga' },
+    { slug: 'cute-kids', label: 'Children' },
+    { slug: 'suspense', label: 'Suspense' },
+    { slug: 'supernatural', label: 'Supernatural tales' },
+    { slug: 'period', label: 'Period' },
+    { slug: 'fantasy', label: 'Fantasy' },
+    { slug: 'wonder', label: 'Fantasy' },
+    { slug: 'growth', label: 'Coming of age' },
+    { slug: 'legend', label: 'Legends' },
+    { slug: 'costume', label: 'Period stories' },
+    { slug: 'urban', label: 'Urban' },
+    { slug: 'youth', label: 'Youth' },
+    { slug: 'comedy', label: 'Comedy' },
+    { slug: 'sci-fi', label: 'Science fiction' },
+    { slug: 'disaster', label: 'Disaster' },
+    { slug: 'war', label: 'War' },
+    { slug: 'variety', label: 'Variety shows' },
+    { slug: 'drama', label: 'Drama' },
+    { slug: 'comeback', label: 'Comeback' },
+    { slug: 'thriller', label: 'Thriller' },
+    { slug: 'horror', label: 'Horror' }
+  ];
   return { success: true, results, page: Number(data.pagination?.pageNum) || page,
     total: Number(data.pagination?.total) || 0, totalPages: Number(data.pagination?.totalPages) || 0,
-    genres, pageTitle, sourceUrl };
+    genres: ORDERED_GENRES, pageTitle, sourceUrl };
 }
 
 function decodeHtml(value) {
@@ -218,10 +243,13 @@ async function fetchCatalogPage(url, signal, proxyLogin, allowTrustedDns, parse)
 }
 async function browseList(options = {}, proxyLogin) {
   const { category = 'real-drama', genre = '', page = 1, forceRefresh = false } = options || {};
+  let normalizedGenre = genre;
+  if (normalizedGenre === 'action' || normalizedGenre === 'adventure') normalizedGenre = 'action-adventure';
+  if (normalizedGenre === 'magic') normalizedGenre = 'wonder';
   const ranking = RANKINGS.has(category);
-  if ((!CATEGORIES.has(category) && !ranking) || (genre && (!/^[a-z0-9-]+$/.test(genre) || ranking))) return { success: false, error: '无效的目录分类或题材' };
+  if ((!CATEGORIES.has(category) && !ranking) || (normalizedGenre && (!/^[a-z0-9-]+$/.test(normalizedGenre) || ranking))) return { success: false, error: '无效的目录分类或题材' };
   const pg = Math.max(1, Number.parseInt(page, 10) || 1);
-  const url = `${SITE}/${ranking ? 'rank' : 'category'}/${category}${genre ? `/${genre}` : ''}${pg > 1 ? `?page=${pg}` : ''}`;
+  const url = `${SITE}/${ranking ? 'rank' : 'category'}/${category}${normalizedGenre ? `/${normalizedGenre}` : ''}${pg > 1 ? `?page=${pg}` : ''}`;
   if (!forceRefresh && cache.get(url)?.expires > Date.now()) return cache.get(url).data;
   if (pending.has(url)) return pending.get(url);
 
