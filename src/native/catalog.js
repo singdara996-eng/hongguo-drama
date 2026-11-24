@@ -50,10 +50,6 @@ function parseCatalog(html, category, page, sourceUrl) {
     throw new Error('来源目录暂不可用，请重试或打开来源页面');
   }
   const pageTitle = data.seo?.title || '';
-  if (category === 'comic') {
-    return { success: true, results: [], page: 1, total: 0, totalPages: 0, genres: [], pageTitle, sourceUrl,
-      unsupported: true, emptyMessage: '漫画属于图文阅读，暂不支持视频播放或下载；请切换「漫剧」或打开来源页面阅读。' };
-  }
   const seen = new Set();
   const results = data.recommendList.filter(item => {
     if (!/^\d{6,}$/.test(item?.series_id) || typeof item.series_name !== 'string' || !item.series_name.trim() || seen.has(String(item.series_id))) return false;
