@@ -211,13 +211,13 @@
                 })),
                 total: data.total || (data.results || []).length,
                 totalPages: data.totalPages || 1,
-                genres: data.genres?.length ? data.genres : defaultGenres,
+                genres: (cat === 'comic') ? [] : (data.genres !== undefined ? data.genres : defaultGenres),
                 page: data.page || pg,
                 hasMore: Boolean(data.hasMore)
               };
             } catch (err) {
               console.error('browseList error:', err);
-              return { success: true, results: [], total: 0, totalPages: 0, genres: defaultGenres };
+              return { success: true, results: [], total: 0, totalPages: 0, genres: (cat === 'comic') ? [] : defaultGenres };
             }
           },
           searchSeries: async (query, options) => {

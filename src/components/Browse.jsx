@@ -608,7 +608,7 @@ function Browse({ onNavigate, active = true }) {
       {/* 题材 chips */}
       <FilterContainer className={mobile ? 'mobile-browse-filters' : undefined}>
       {mobile && <summary>{t("筛选题材与状态")}{genre && <> · {t(meta.genres.find(item => item.slug === genre)?.label || '')}</>}{completion !== 'all' && <> · {t(completion === 'completed' ? '已完结' : '更新中')}</>}</summary>}
-      {meta.genres.length > 0 && (
+      {meta.genres.length > 0 && category !== 'comic' && (
         <div className="browse-genres">
           <button
             className={`genre-chip ${genre === '' ? 'active' : ''}`}
