@@ -144,13 +144,33 @@ function createApp({ token, dataRoot, downloadRoot, media = defaultMedia, search
         const category = url.searchParams.get('category') || url.searchParams.get('ranking') || 'real-drama';
         const genre = url.searchParams.get('genre') || '';
         const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
+        const APP_GENRE_MAP = {
+          'real-drama': { 'action': 'cate_9165', 'action-adventure': 'cate_9165', 'adventure': 'cate_9163', 'magic': 'cate_9164', 'romance': 'cate_5000', 'family': 'cate_5001', 'clan': 'cate_5002', 'cute-kids': 'cate_5003', 'suspense': 'cate_5004', 'supernatural': 'cate_5006', 'period': 'cate_5007', 'fantasy': 'cate_5008', 'wonder': 'cate_5009', 'growth': 'cate_5010', 'legend': 'cate_5011', 'costume': 'cate_5021', 'urban': 'cate_5022', 'youth': 'cate_5023', 'comedy': 'cate_5024', 'sci-fi': 'cate_5025', 'disaster': 'cate_5026', 'war': 'cate_5028', 'variety': 'cate_5029', 'drama': 'cate_5030', 'comeback': 'cate_5031', 'thriller': 'cate_5132', 'horror': 'cate_5133' },
+          'ai-drama': { 'action': 'cate_9324', 'action-adventure': 'cate_9324', 'romance': 'cate_5463', 'costume': 'cate_5464', 'comeback': 'cate_5465', 'legend': 'cate_5466', 'growth': 'cate_5467', 'family': 'cate_5468', 'clan': 'cate_5469', 'cute-kids': 'cate_5470', 'suspense': 'cate_5471', 'thriller': 'cate_5472', 'horror': 'cate_5473', 'supernatural': 'cate_5474', 'period': 'cate_5475', 'fantasy': 'cate_5476', 'wonder': 'cate_5477', 'urban': 'cate_5478', 'youth': 'cate_5479', 'comedy': 'cate_5480', 'sci-fi': 'cate_5481', 'disaster': 'cate_5482', 'adventure': 'cate_5483', 'war': 'cate_5484', 'drama': 'cate_5485', 'magic': 'cate_5486' },
+          'comic-drama': { 'action': 'cate_9281', 'action-adventure': 'cate_9281', 'variety': 'cate_9280', 'romance': 'cate_5876', 'costume': 'cate_5891', 'comeback': 'cate_5898', 'legend': 'cate_5912', 'growth': 'cate_5916', 'family': 'cate_5924', 'clan': 'cate_5931', 'cute-kids': 'cate_5936', 'suspense': 'cate_5939', 'thriller': 'cate_5949', 'horror': 'cate_5951', 'supernatural': 'cate_5955', 'period': 'cate_5958', 'fantasy': 'cate_5967', 'wonder': 'cate_5975', 'urban': 'cate_5981', 'youth': 'cate_5987', 'comedy': 'cate_5991', 'sci-fi': 'cate_5994', 'disaster': 'cate_5998', 'adventure': 'cate_6003', 'war': 'cate_6014', 'drama': 'cate_6019', 'magic': 'cate_6023' }
+        };
         try {
           const { browseList } = require('../src/native/catalog.js');
-          let catalog = await browseList({ category, genre, page });
+          let catalog = null;
+          const isAction = (genre === 'action' || genre === 'action-adventure');
+          if (isAction && APP_GENRE_MAP[category]?.[genre]) {
+            try {
+              const appCat = require('../src/native/hongguo-app-catalog.js');
+              catalog = await appCat.browseList({ category, genre: APP_GENRE_MAP[category][genre], catalogScope: 'browse', page });
+              const base = await browseList({ category, genre: '', page: 1 });
+              if (catalog && base?.genres) catalog.genres = base.genres;
+            } catch {}
+          }
+          if (!catalog || !catalog.results || !catalog.results.length) {
+            catalog = await browseList({ category, genre, page });
+          }
           if (!catalog || !catalog.results || !catalog.results.length) {
             try {
               const appCat = require('../src/native/hongguo-app-catalog.js');
-              catalog = await appCat.browseList({ category, genre, page });
+              const appGenre = APP_GENRE_MAP[category]?.[genre] || genre;
+              catalog = await appCat.browseList({ category, genre: appGenre, catalogScope: 'browse', page });
+              const base = await browseList({ category, genre: '', page: 1 });
+              if (catalog && base?.genres) catalog.genres = base.genres;
             } catch {}
           }
           if (!catalog || !catalog.results || !catalog.results.length) {
