@@ -1,1 +1,0 @@
-Optimize data usage: preload metadata only, remove background preloading, and lower streaming bitrate
