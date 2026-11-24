@@ -82,7 +82,7 @@
                 <button id="web-player-close" style="background:#27272a; border:1px solid #3f3f46; color:#fff; font-size:18px; width:36px; height:36px; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s;">✕</button>
               </div>
               <div style="position:relative; width:100%; max-width:880px; background:#000; border-radius:12px; overflow:hidden; box-shadow:0 12px 48px rgba(0,0,0,0.9); display:flex; justify-content:center; align-items:center; aspect-ratio:16/9; max-height:70vh;">
-                <video id="web-player-video" controls autoplay playsinline preload="auto" style="width:100%; height:100%; object-fit:contain; background:#000; outline:none;"></video>
+                <video id="web-player-video" controls autoplay playsinline preload="metadata" style="width:100%; height:100%; object-fit:contain; background:#000; outline:none;"></video>
                 <div id="web-player-loading" style="position:absolute; color:#fff; font-size:15px; background:rgba(0,0,0,0.75); padding:10px 20px; border-radius:8px; display:none; pointer-events:none;">កំពុងទាញយកវីដេអូ...</div>
               </div>
               <div style="width:100%; max-width:880px; display:flex; justify-content:space-between; align-items:center; margin-top:14px; gap:10px; flex-wrap:wrap;">
@@ -100,6 +100,10 @@
                     <button type="button" data-speed="1.5" class="web-speed-btn" style="background:transparent; color:#d4d4d8; border:none; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">1.5x</button>
                     <button type="button" data-speed="2" class="web-speed-btn" style="background:transparent; color:#d4d4d8; border:none; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">2x</button>
                   </div>
+                </div>
+                <!-- Data Saver Badge -->
+                <div style="display:flex; align-items:center; gap:5px; background:#18181b; padding:4px 10px; border-radius:6px; border:1px solid #27272a; color:#10b981; font-size:12px; font-weight:500;">
+                  <span>📶 សន្សំ Internet</span>
                 </div>
                 <button id="web-player-next" style="background:#c8383d; border:none; color:#fff; padding:8px 16px; border-radius:6px; cursor:pointer; font-size:13.5px; font-weight:600;">ភាគបន្ទាប់ (Next) ›</button>
               </div>
@@ -132,7 +136,7 @@
 
             document.getElementById('web-player-close').onclick = () => {
               const vid = document.getElementById('web-player-video');
-              if (vid) { vid.pause(); vid.src = ''; }
+              if (vid) { vid.pause(); vid.removeAttribute('src'); vid.load(); }
               modal.style.display = 'none';
             };
 
@@ -161,7 +165,7 @@
               if (!vid) return;
 
               if (e.key === 'Escape') {
-                vid.pause(); vid.src = '';
+                vid.pause(); vid.removeAttribute('src'); vid.load();
                 modal.style.display = 'none';
               } else if (e.key === 'ArrowRight') {
                 e.preventDefault();
@@ -237,42 +241,28 @@
             loadingEl.textContent = 'បរាជ័យក្នុងការចាក់វីដេអូភាគនេះ';
           };
 
-          // Check if direct preloaded URL exists for instant playback
-          const preloaded = preloadedUrls.get(ep.vid);
-          if (preloaded) {
-            videoEl.src = preloaded;
-            videoEl.load();
-            videoEl.play().catch(() => {});
-          } else {
-            // Fetch direct CDN stream URL for ultra-fast direct streaming
-            fetch(`${apiBase}/api/stream-url/${encodeURIComponent(currentSeriesId)}/${encodeURIComponent(ep.vid)}`)
-              .then(r => r.json())
-              .then(data => {
-                if (currentVidIndex === index && data?.url) {
-                  videoEl.src = data.url;
-                  videoEl.load();
-                  videoEl.play().catch(() => {});
-                }
-              })
-              .catch(() => {
-                if (currentVidIndex === index) {
-                  videoEl.src = `${apiBase}/api/stream/${encodeURIComponent(currentSeriesId)}/${encodeURIComponent(ep.vid)}`;
-                  videoEl.load();
-                  videoEl.play().catch(() => {});
-                }
-              });
-          }
+          // Reset previous stream immediately to avoid background buffering
+          videoEl.pause();
+          videoEl.removeAttribute('src');
+          videoEl.load();
 
-          // Preload next episode in background for instant transition
-          const nextEp = currentEpisodes.find(e => e.vid_index === index + 1);
-          if (nextEp && !preloadedUrls.has(nextEp.vid)) {
-            fetch(`${apiBase}/api/stream-url/${encodeURIComponent(currentSeriesId)}/${encodeURIComponent(nextEp.vid)}`)
-              .then(r => r.json())
-              .then(data => {
-                if (data?.url) preloadedUrls.set(nextEp.vid, data.url);
-              })
-              .catch(() => {});
-          }
+          // Fetch direct CDN stream URL on demand
+          fetch(`${apiBase}/api/stream-url/${encodeURIComponent(currentSeriesId)}/${encodeURIComponent(ep.vid)}`)
+            .then(r => r.json())
+            .then(data => {
+              if (currentVidIndex === index && data?.url) {
+                videoEl.src = data.url;
+                videoEl.load();
+                videoEl.play().catch(() => {});
+              }
+            })
+            .catch(() => {
+              if (currentVidIndex === index) {
+                videoEl.src = `${apiBase}/api/stream/${encodeURIComponent(currentSeriesId)}/${encodeURIComponent(ep.vid)}`;
+                videoEl.load();
+                videoEl.play().catch(() => {});
+              }
+            });
         };
 
         // Real-time task progress poller
