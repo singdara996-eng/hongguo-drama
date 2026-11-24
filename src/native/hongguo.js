@@ -761,7 +761,7 @@ async function fetchPlayUrlSingle(vid, sid, options = {}) {
     if (String(vid).startsWith('hema:') || String(sid).startsWith('hema:')) return require('./hema').fetchPlayUrlSingle(vid, sid);
     if (String(vid).startsWith('xifan:') || String(sid).startsWith('xifan:')) return require('./xifan').fetchPlayUrlSingle(vid, sid);
     const skipWeb = (failedWebMedia.get(String(vid)) || 0) > Date.now();
-    const allowLowerQuality = options.allowLowerQuality === true && quality !== 'auto';
+    const allowLowerQuality = options.allowLowerQuality !== false && quality !== 'auto';
     const contentType = ['1001', '1004'].includes(String(options.content_type || options.contentType)) ? String(options.content_type || options.contentType) : '1004';
     const sdkBatchVids = Array.isArray(options.sdkBatchVids) ? options.sdkBatchVids : undefined;
     const sdkFresh = options.sdkFresh === true;

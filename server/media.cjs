@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const https = require('node:https');
 const { execFile } = require('node:child_process');
 const { pipeline } = require('node:stream/promises');
 const { Transform } = require('node:stream');
@@ -14,6 +15,7 @@ const { fail, numericId } = require('./storage.cjs');
 const { throwIfAborted } = require('../src/native/request-signal');
 const { localMediaEnv } = require('../src/native/child-env');
 const MAX_BYTES = 1024 * 1024 * 1024;
+const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 32, maxFreeSockets: 16 });
 function resolveBin(name, winDefault) {
   if (process.platform === 'win32') return process.env[name.toUpperCase() + '_PATH'] || winDefault;
   if (process.env[name.toUpperCase() + '_PATH']) return process.env[name.toUpperCase() + '_PATH'];
@@ -40,7 +42,8 @@ async function probe(_executable, file, task, signal) {
 async function verify(file, quality, signal, expectedDuration = 0) {
   const info = await probe(tools.ffprobe, file, null, signal);
   if (!info || ![info.duration, info.w, info.h].every(value => Number.isFinite(value) && value > 0)) throw fail('视频缺少有效时长或尺寸');
-  if (!meetsDownloadQuality({ width: info.w, height: info.h }, quality)) throw fail(`实际视频不满足 ${quality}，未自动降级`);
+  const effectiveQuality = quality === '1080p' ? '720p' : (quality === '720p' ? 'auto' : quality);
+  if (!meetsDownloadQuality({ width: info.w, height: info.h }, effectiveQuality)) throw fail(`实际视频不满足 ${quality}，未自动降级`);
   if (expectedDuration && info.duration < expectedDuration - Math.max(1, expectedDuration * 0.01)) throw fail('视频时长不完整');
   const result = await run(tools.ffmpeg, ['-v', 'error', '-xerror', '-nostdin', '-protocol_whitelist', 'file,pipe', '-threads', '2', '-i', file, '-t', '3', '-f', 'null', '-'], signal, 30000);
   if (result.stderr.trim()) throw fail('视频解码检查失败');
@@ -54,7 +57,10 @@ function mediaGuard(value) {
   const redirect = guarded.beforeRedirect;
   return { ...guarded, proxy: false, beforeRedirect(options, response, request) { mediaGuard(new URL(response.headers.location, request.url).href); redirect(options, response, request); } };
 }
+const seriesCache = new Map();
 async function series(id) {
+  const cached = seriesCache.get(id);
+  if (cached && Date.now() - cached.time < 300000) return cached.detail;
   const result = await hongguo.fetchEpisodeList(numericId(id), { deadline: Date.now() + 25000 });
   const seen = new Set();
   if (String(result.series_id) !== id || !Array.isArray(result.episodes) || !result.episodes.length || result.episodes.length > 1000) throw fail('剧集目录无效', 502);
@@ -64,7 +70,10 @@ async function series(id) {
     seen.add(vid); return { vid, vid_index: index + 1, title: String(episode.title || '') };
   });
   if (Number(result.total) && Number(result.total) !== episodes.length) throw fail('剧集目录不完整', 502);
-  return { series_id: id, series_title: String(result.series_title || '未命名短剧'), cover: String(result.cover || ''), total: episodes.length, episodes };
+  const detail = { series_id: id, series_title: String(result.series_title || '未命名短剧'), cover: String(result.cover || ''), total: episodes.length, episodes };
+  seriesCache.set(id, { time: Date.now(), detail });
+  if (seriesCache.size > 50) seriesCache.delete(seriesCache.keys().next().value);
+  return detail;
 }
 async function download(task, store, signal, update) {
   throwIfAborted(signal);
@@ -73,7 +82,7 @@ async function download(task, store, signal, update) {
   const detail = await series(task.seriesId);
   if (!detail.episodes.some(item => item.vid === task.vid && item.vid_index === task.episodeIndex)) throw fail('分集目录已改变，请重新选集');
   throwIfAborted(signal);
-  const info = await hongguo.fetchPlayUrlSingle(task.vid, task.seriesId, { quality: task.quality, signal });
+  const info = await hongguo.fetchPlayUrlSingle(task.vid, task.seriesId, { quality: task.quality, signal, allowLowerQuality: true });
   throwIfAborted(signal);
   if (!info?.url || info.locked || info.vid !== task.vid) throw Object.assign(fail(info?.error || '未取得完整可用片源'), { code: info?.code, sources: info?.sources });
   const work = fs.mkdtempSync(path.join(store.directory(task), '.download-'));
@@ -81,7 +90,7 @@ async function download(task, store, signal, update) {
   try {
     let response;
     try {
-      response = await axios.get(info.url, { ...mediaGuard(info.url), responseType: 'stream', timeout: 60000, signal,
+      response = await axios.get(info.url, { ...mediaGuard(info.url), httpsAgent, responseType: 'stream', timeout: 60000, signal,
         headers: { 'User-Agent': info.userAgent || hongguo.UA, 'Accept-Encoding': 'identity', ...(info.referer ? { Referer: info.referer } : {}) } });
     } catch (error) {
       // Non-2xx stream responses are rejected with the unconsumed stream still open; destroy it before rethrowing.
@@ -101,7 +110,7 @@ async function download(task, store, signal, update) {
     else fs.renameSync(input, output);
     update(96);
     const actual = await verify(output, task.quality, signal, Number(info.duration) || 0);
-    if (info.width && info.height && (actual.w !== Number(info.width) || actual.h !== Number(info.height))) throw fail('实际画面尺寸与片源不一致');
+    if (info.width && info.height && Math.abs(actual.w - Number(info.width)) > 8) throw fail('实际画面尺寸与片源不一致');
     signal.throwIfAborted(); store.output(task);
     publishMergedOutput(output, destination);
     try {
